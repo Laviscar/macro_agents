@@ -1,0 +1,44 @@
+documents:
+  - id: signal_levels
+    path: knowledge/shared/signal_levels.md
+    agent: shared
+    type: taxonomy
+    load_mode: always
+    priority: 100
+
+  - id: confidence_rubric
+    path: knowledge/shared/confidence_rubric.md
+    agent: shared
+    type: rubric
+    load_mode: always
+    priority: 95
+
+  - id: analyst_master
+    path: knowledge/analyst/analyst_master_prompt.md
+    agent: analyst
+    type: master_prompt
+    load_mode: always
+    priority: 100
+
+  - id: evidence_extraction
+    path: knowledge/analyst/protocols/06_evidence_extraction.md
+    agent: analyst
+    type: protocol
+    load_mode: by_task
+    trigger_tasks: [extract_evidence]
+    priority: 90
+
+  - id: narrative_master
+    path: knowledge/narrative_manager/narrative_manager_master_prompt.md
+    agent: narrative_manager
+    type: master_prompt
+    load_mode: always
+    priority: 100
+
+  - id: commit_logging
+    path: knowledge/narrative_manager/protocols/06_commit_logging.md
+    agent: narrative_manager
+    type: protocol
+    load_mode: by_task
+    trigger_tasks: [record_commit]
+    priority: 70

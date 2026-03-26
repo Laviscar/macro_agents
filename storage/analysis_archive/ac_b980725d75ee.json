@@ -1,0 +1,24 @@
+{
+  "id": "ac_b980725d75ee",
+  "event_id": "rc_de90a3467ef2",
+  "source_card_ids": [
+    "rc_de90a3467ef2"
+  ],
+  "reframed_question": "这条信息是否会改变当前主线叙事的关键命题：US CPI cools more than expected？",
+  "signal_level": "structure",
+  "thesis": "初步判断：US CPI cools more than expected，对当前主线形成直接支持。",
+  "evidence_for": [
+    "Inflation slowed for a second month."
+  ],
+  "evidence_against": [],
+  "macro_variables": [
+    "inflation",
+    "rates"
+  ],
+  "asset_mapping": [],
+  "confidence": 0.6,
+  "mainline_relation": "supports",
+  "candidate_branch_title": null,
+  "invalidation_conditions": [],
+  "created_at": "2026-03-26T08:59:16.130458+00:00"
+}

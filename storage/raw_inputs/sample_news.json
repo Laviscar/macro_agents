@@ -1,0 +1,24 @@
+[
+  {
+    "timestamp": "2026-03-25T12:00:00Z",
+    "source": "example_news",
+    "url": "https://example.com/news1",
+    "title": "US CPI cools more than expected",
+    "summary": "Inflation slowed for a second month.",
+    "region": [
+      "US"
+    ],
+    "theme": [
+      "inflation",
+      "rates"
+    ],
+    "card_type": "data_release",
+    "tags": [
+      "cpi",
+      "fed"
+    ],
+    "importance_score": 0.9,
+    "structural_score": 0.8,
+    "verifiability_score": 0.95
+  }
+]

@@ -1,0 +1,3 @@
+news_sorter:
+  analysis_threshold: 0.7
+  watchlist_threshold: 0.45

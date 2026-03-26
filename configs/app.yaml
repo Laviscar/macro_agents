@@ -1,0 +1,5 @@
+app:
+  name: macro_agents
+  env: dev
+  default_region: Global
+  default_theme: macro_regime
