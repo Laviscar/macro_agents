@@ -1,0 +1,203 @@
+service:
+  db_path: ../storage/macro_agents.sqlite3
+  default_poll_interval_seconds: 300
+  idle_sleep_seconds: 1
+  retry:
+    max_attempts: 2
+    backoff_seconds: 2
+    max_backoff_seconds: 30
+
+sources:
+  - type: rss
+    name: fed_rss
+    enabled: false
+    poll_interval_seconds: 300
+    url: https://www.federalreserve.gov/feeds/press_all.xml
+
+  - type: rss
+    name: bls_latest_rss
+    enabled: false
+    poll_interval_seconds: 900
+    url: https://www.bls.gov/feed/bls_latest.rss
+
+  - type: rss
+    name: bis_press_rss
+    enabled: false
+    poll_interval_seconds: 900
+    url: https://www.bis.org/doclist/all_pressrels.rss
+
+  - type: finnhub
+    name: finnhub_general
+    enabled: true
+    poll_interval_seconds: 180
+    endpoint: https://finnhub.io/api/v1/news
+    api_key_env: FINNHUB_API_KEY
+    category: general
+    limit: 20
+
+  - type: finnhub
+    name: finnhub_symbols
+    enabled: false
+    poll_interval_seconds: 180
+    endpoint: https://finnhub.io/api/v1/company-news
+    api_key_env: FINNHUB_API_KEY
+    symbols:
+      - AAPL
+      - MSFT
+      - NVDA
+    lookback_days: 3
+    limit: 30
+
+trusted_sources:
+  - name: federal_reserve
+    provider: Federal Reserve
+    category: official_data
+    reliability_tier: primary
+    url: https://www.federalreserve.gov/
+    endpoints:
+      - https://www.federalreserve.gov/feeds/press_all.xml
+    notes: Official US central bank releases, policy statements, speeches, and supervision materials.
+
+  - name: bls
+    provider: US Bureau of Labor Statistics
+    category: official_data
+    reliability_tier: primary
+    url: https://www.bls.gov/
+    endpoints:
+      - https://www.bls.gov/feed/bls_latest.rss
+    notes: Official US labor, inflation, productivity, and price statistics.
+
+  - name: bea
+    provider: US Bureau of Economic Analysis
+    category: official_data
+    reliability_tier: primary
+    url: https://www.bea.gov/
+    notes: Official US GDP, income, trade, and industry account statistics.
+
+  - name: us_treasury
+    provider: US Department of the Treasury
+    category: official_data
+    reliability_tier: primary
+    url: https://home.treasury.gov/
+    notes: Official US fiscal, sanctions, debt, and Treasury market information.
+
+  - name: fred
+    provider: Federal Reserve Bank of St. Louis
+    category: official_database
+    reliability_tier: primary
+    url: https://fred.stlouisfed.org/
+    notes: Curated macroeconomic time series database with source attribution.
+
+  - name: imf
+    provider: International Monetary Fund
+    category: official_database
+    reliability_tier: primary
+    url: https://www.imf.org/
+    notes: Official global macro, financial stability, country surveillance, and data publications.
+
+  - name: world_bank
+    provider: World Bank
+    category: official_database
+    reliability_tier: primary
+    url: https://www.worldbank.org/
+    notes: Official development, country, and cross-country indicator data.
+
+  - name: oecd
+    provider: OECD
+    category: official_database
+    reliability_tier: primary
+    url: https://www.oecd.org/
+    notes: Official cross-country economic, social, trade, and policy data.
+
+  - name: bis
+    provider: Bank for International Settlements
+    category: official_database
+    reliability_tier: primary
+    url: https://www.bis.org/
+    endpoints:
+      - https://www.bis.org/doclist/all_pressrels.rss
+    notes: Central bank cooperation, global liquidity, banking, credit, and financial stability research.
+
+  - name: china_nbs
+    provider: National Bureau of Statistics of China
+    category: official_data
+    reliability_tier: primary
+    url: https://www.stats.gov.cn/
+    notes: Official China statistical releases and datasets.
+
+  - name: pboc
+    provider: People's Bank of China
+    category: official_data
+    reliability_tier: primary
+    url: http://www.pbc.gov.cn/
+    notes: Official China monetary policy, financial statistics, and central bank announcements.
+
+  - name: china_mof
+    provider: Ministry of Finance of China
+    category: official_data
+    reliability_tier: primary
+    url: https://www.mof.gov.cn/
+    notes: Official China fiscal policy, budget, and public finance data.
+
+  - name: china_customs
+    provider: General Administration of Customs of China
+    category: official_data
+    reliability_tier: primary
+    url: http://www.customs.gov.cn/
+    notes: Official China trade and customs releases.
+
+  - name: safe
+    provider: State Administration of Foreign Exchange
+    category: official_data
+    reliability_tier: primary
+    url: https://www.safe.gov.cn/
+    notes: Official China FX, balance of payments, and reserve data.
+
+  - name: csrc
+    provider: China Securities Regulatory Commission
+    category: official_policy
+    reliability_tier: primary
+    url: http://www.csrc.gov.cn/
+    notes: Official China securities market regulation and policy releases.
+
+  - name: reuters
+    provider: Reuters
+    category: wire_service
+    reliability_tier: secondary
+    url: https://www.reuters.com/
+    notes: Global event reporting and market news; verify market-moving claims against original documents when available.
+
+  - name: associated_press
+    provider: Associated Press
+    category: wire_service
+    reliability_tier: secondary
+    url: https://apnews.com/
+    notes: Broad factual reporting and public affairs coverage.
+
+  - name: bloomberg
+    provider: Bloomberg
+    category: financial_media
+    reliability_tier: secondary
+    url: https://www.bloomberg.com/
+    notes: Market, company, and macro news; useful for event monitoring and terminals.
+
+  - name: financial_times
+    provider: Financial Times
+    category: financial_media
+    reliability_tier: secondary
+    url: https://www.ft.com/
+    notes: Global business, markets, policy, and geopolitical analysis.
+
+  - name: our_world_in_data
+    provider: Our World in Data
+    category: research_database
+    reliability_tier: secondary
+    url: https://ourworldindata.org/
+    notes: Transparent long-run datasets and charts with source links.
+
+  - name: pew_research_center
+    provider: Pew Research Center
+    category: research
+    reliability_tier: secondary
+    url: https://www.pewresearch.org/
+    notes: Survey research and social trend analysis with published methodology.

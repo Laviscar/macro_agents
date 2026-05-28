@@ -103,6 +103,194 @@ cd /Users/luyi/Projets/Macro_analyst/macro_agents
 /Users/luyi/tools/miniconda3/envs/macro/bin/python -m pytest
 ```
 
+## 常驻抓取服务
+
+这一轮新增了可长期运行的抓取服务，职责只覆盖：
+
+- 多源轮询抓取
+- 统一归一化为 `RawNewsItem`
+- 复用 `SQLiteNewsRepository` 入库
+- 单源失败隔离
+- 最小重试 / 退避
+- `SIGINT` / `SIGTERM` 优雅退出
+
+### 支持的 source type
+
+- `rss`
+- `finnhub`
+
+### 配置文件
+
+默认配置在：
+
+- `config/sources.yaml`
+
+配置结构示例：
+
+```yaml
+service:
+  db_path: ../storage/macro_agents.sqlite3
+  default_poll_interval_seconds: 300
+  retry:
+    max_attempts: 2
+    backoff_seconds: 2
+
+sources:
+  - type: rss
+    name: fed_rss
+    enabled: false
+    url: https://www.federalreserve.gov/feeds/press_all.xml
+
+  - type: rss
+    name: bls_latest_rss
+    enabled: false
+    url: https://www.bls.gov/feed/bls_latest.rss
+
+  - type: finnhub
+    name: finnhub_general
+    enabled: true
+    endpoint: https://finnhub.io/api/v1/news
+    api_key_env: FINNHUB_API_KEY
+    category: general
+    limit: 20
+```
+
+### Finnhub 配置
+
+默认配置已经切到 `Finnhub general news`，启动前先设置环境变量：
+
+```bash
+export FINNHUB_API_KEY=your_token_here
+```
+
+默认的 `config/sources.yaml` 现在只启用：
+
+- `finnhub_general`
+
+默认不启用：
+
+- `fed_rss`
+- `bls_latest_rss`
+- `bis_press_rss`
+- `finnhub_symbols`
+
+如果启用了 `finnhub` source 但没有设置 `FINNHUB_API_KEY`，服务会在启动阶段直接报出明确错误，而不是等到轮询时才失败。
+
+支持的最小配置字段包括：
+
+- `type`
+- `name`
+- `enabled`
+- `poll_interval_seconds`
+- `url` / `endpoint`
+- `api_key_env`
+- `symbols` / `tickers`
+- `category`
+- `limit`
+- `lookback_days`
+- `params`
+
+### 可信来源目录
+
+`config/sources.yaml` 还包含顶层 `trusted_sources`，用于维护可信信息来源白名单。它不会自动启动抓取，也不会绕过 adapter 注册；只有 `sources` 里的条目才会被 live ingest 轮询。
+
+目录里的 `reliability_tier` 约定：
+
+- `primary`: 官方数据、官方数据库、监管或央行原始发布
+- `secondary`: 通讯社、严肃财经媒体、研究数据库或方法论透明的研究机构
+
+已经加入的默认目录覆盖：
+
+- 中美官方宏观与政策来源
+- IMF、World Bank、OECD、BIS、FRED 等国际数据库
+- Reuters、AP、Bloomberg、FT 等事件流和财经媒体
+- Our World in Data、Pew Research Center 等研究型来源
+
+### 启动命令
+
+```bash
+cd /Users/luyi/Projets/Macro_analyst/macro_agents
+/Users/luyi/tools/miniconda3/envs/macro/bin/python run_live_ingest.py --config config/sources.yaml
+```
+
+预期第一轮日志里会看到：
+
+- `service_started`
+- `source_poll_succeeded`
+
+或：
+
+```bash
+cd /Users/luyi/Projets/Macro_analyst/macro_agents
+/Users/luyi/tools/miniconda3/envs/macro/bin/python -m pipelines.live_ingest --config config/sources.yaml
+```
+
+兼容说明：
+
+- 旧路径 `configs/feeds.yaml` 在新文件存在时仍会被 loader 识别为兼容别名
+- 日常维护请只编辑 `config/sources.yaml`
+
+### 扩展一个新新闻源
+
+后续新增 source 时，理想路径是：
+
+1. 在 `sources/` 下新增一个 adapter
+2. 让它输出统一的 `RawNewsItem`
+3. 在 `sources/factory.py` 里注册新 type
+4. 在 `config/sources.yaml` 增加对应配置
+
+主轮询服务本身不需要改。
+
+### 配置整理原则
+
+- 所有非敏感、人工可编辑配置统一放在 `config/`
+- `config/sources.yaml` 是抓取服务的主配置入口
+- `config/README.md` 说明哪些字段适合日常修改
+- API keys 等敏感信息继续走环境变量，不写进 YAML
+
+## Ingestion QA
+
+为了验证第一段链路“抓新闻 -> 洗新闻 -> 存新闻”，现在提供了一个固定 fixture 的 QA 入口。
+
+### 运行命令
+
+```bash
+cd /Users/luyi/Projets/Macro_analyst/macro_agents
+/Users/luyi/tools/miniconda3/envs/macro/bin/python -m pipelines.ingestion_qa
+```
+
+或：
+
+```bash
+cd /Users/luyi/Projets/Macro_analyst/macro_agents
+/Users/luyi/tools/miniconda3/envs/macro/bin/python run_ingestion_qa.py
+```
+
+### QA 会做什么
+
+- 用固定 fixture source 模拟抓取
+- 验证重复新闻不会重复入库
+- 验证坏 payload 不会拖垮整批有效新闻
+- 跑一轮 `db_consumer`，让 `ResourceCard` 和状态变化可见
+- 生成简明文本报告
+- 写出一份 UI 可读的 JSON 报告
+
+### 报告位置
+
+- `storage/qa/ingestion_qa.sqlite3`
+- `storage/qa/ingestion_report.json`
+
+### 在 UI 看什么
+
+运行 QA 后，打开 Streamlit 的 `Ingestion QA` Tab，可以看到：
+
+- source 级抓取统计
+- 去重与坏 payload 统计
+- 当前状态计数
+- 清洗 route 分布
+- 原始新闻 / ResourceCard / 当前状态的样本对照
+- source 失败和坏 payload 明细
+
 ## V1.1 未完成范围 / 后续方向
 
 - `raises_probability_of` 未来可能需要区分“强化 main”与“强化 branch”
