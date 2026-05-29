@@ -28,6 +28,8 @@ class LoopContext:
     tool_results: list[ToolResult] = field(default_factory=list)
     narrative_result: dict | None = None
     stop_reason: str | None = None
+    planned_tools: list[str] = field(default_factory=list)
+    all_skipped: bool = False
 
 
 @dataclass
@@ -102,28 +104,47 @@ class NarrativeLoopEngine:
 
     def _handle(self, ctx: LoopContext) -> None:
         if ctx.current_state == LoopState.PLAN:
-            pass  # Phase 1: static plan, no LLM needed
+            ctx.planned_tools = ["sort_and_analyze"] if ctx.news_item_ids else []
+            self._emit(ctx, EventType.PLAN_DECIDED, {
+                "planned_tools": ctx.planned_tools,
+                "news_item_count": len(ctx.news_item_ids),
+            })
 
         elif ctx.current_state == LoopState.TOOL_EXEC:
-            self._emit(ctx, EventType.TOOL_CALL, {
-                "tool": "sort_and_analyze",
-                "news_item_ids": ctx.news_item_ids,
-            })
-            result = self.runtime.execute("sort_and_analyze", {"news_item_ids": ctx.news_item_ids})
-            ctx.tool_results.append(result)
-            self._emit(ctx, EventType.TOOL_RESULT, {
-                "tool": "sort_and_analyze",
-                "success": result.success,
-                "error": result.error,
-                "processed": result.output.get("processed", 0) if result.success and result.output else 0,
-            })
-            if not result.success:
-                raise RuntimeError(f"sort_and_analyze failed: {result.error}")
+            if not ctx.planned_tools:
+                return  # PLAN decided nothing to do
+
+            for tool_name in ctx.planned_tools:
+                self._emit(ctx, EventType.TOOL_CALL, {
+                    "tool": tool_name,
+                    "news_item_ids": ctx.news_item_ids,
+                })
+                result = self.runtime.execute(tool_name, {"news_item_ids": ctx.news_item_ids})
+                ctx.tool_results.append(result)
+                self._emit(ctx, EventType.TOOL_RESULT, {
+                    "tool": tool_name,
+                    "success": result.success,
+                    "error": result.error,
+                    "processed": result.output.get("processed", 0) if result.success and result.output else 0,
+                    "policy_denied": result.policy_record is not None,
+                })
+                if result.policy_record is not None:
+                    self._emit(ctx, EventType.POLICY_DECISION, {
+                        "tool": result.policy_record.tool_name,
+                        "risk_level": result.policy_record.risk_level,
+                        "decision": result.policy_record.decision,
+                        "reason": result.policy_record.reason,
+                    })
+                if not result.success:
+                    raise RuntimeError(f"{tool_name} failed: {result.error}")
 
         elif ctx.current_state == LoopState.OBSERVE:
             pass  # Phase 1: tool results already verified in TOOL_EXEC
 
         elif ctx.current_state == LoopState.UPDATE_NARRATIVE:
+            if not ctx.tool_results:
+                return  # nothing to narrate when no tools ran
+
             all_evidence = []
             all_analysis_cards = []
             for r in ctx.tool_results:

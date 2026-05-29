@@ -1,3 +1,5 @@
+import json as _json
+
 import pytest
 from harness.budget import BudgetConfig, BudgetGuard
 from harness.loop import LoopResult, LoopState, NarrativeLoopEngine
@@ -130,6 +132,41 @@ def test_update_narrative_failure_transitions_to_failed(store):
     budget = BudgetGuard(BudgetConfig(time_budget_seconds=60.0))
     engine = NarrativeLoopEngine(runtime=runtime, session_store=store, budget=budget)
     session_id = store.create_session()
-    result = engine.run(session_id=session_id, news_item_ids=[])
+    result = engine.run(session_id=session_id, news_item_ids=[1])
     assert result.final_state == LoopState.FAILED
     assert "update_narrative" in result.stop_reason
+
+
+def test_plan_sets_planned_tools_when_news_items_present(store, passing_runtime):
+    budget = BudgetGuard(BudgetConfig(time_budget_seconds=60.0))
+    engine = NarrativeLoopEngine(runtime=passing_runtime, session_store=store, budget=budget)
+    session_id = store.create_session()
+    result = engine.run(session_id=session_id, news_item_ids=[1, 2, 3])
+    events = store.list_events_for_session(session_id)
+    plan_events = [e for e in events if e["event_type"] == "plan_decided"]
+    assert len(plan_events) == 1
+    payload = _json.loads(plan_events[0]["payload_json"])
+    assert "sort_and_analyze" in payload["planned_tools"]
+
+
+def test_plan_sets_empty_tools_when_no_news_items(store, passing_runtime):
+    budget = BudgetGuard(BudgetConfig(time_budget_seconds=60.0))
+    engine = NarrativeLoopEngine(runtime=passing_runtime, session_store=store, budget=budget)
+    session_id = store.create_session()
+    engine.run(session_id=session_id, news_item_ids=[])
+    events = store.list_events_for_session(session_id)
+    plan_events = [e for e in events if e["event_type"] == "plan_decided"]
+    assert len(plan_events) == 1
+    payload = _json.loads(plan_events[0]["payload_json"])
+    assert payload["planned_tools"] == []
+
+
+def test_empty_plan_skips_tool_exec_and_still_completes(store, passing_runtime):
+    budget = BudgetGuard(BudgetConfig(time_budget_seconds=60.0))
+    engine = NarrativeLoopEngine(runtime=passing_runtime, session_store=store, budget=budget)
+    session_id = store.create_session()
+    result = engine.run(session_id=session_id, news_item_ids=[])
+    assert result.final_state == LoopState.DONE
+    events = store.list_events_for_session(session_id)
+    tool_calls = [e for e in events if e["event_type"] == "tool_call"]
+    assert len(tool_calls) == 0
