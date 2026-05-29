@@ -158,6 +158,12 @@ class HarnessCoordinator:
         return engine.run(session_id=session_id, news_item_ids=task_input.news_item_ids)
 
     def run_pending(self, limit: int = 20, time_budget_seconds: float = 300.0) -> LoopResult:
+        """Pull pending news items from DB and run a harness task over them.
+
+        Phase 1 note: processed items are NOT marked as analyzed in news_items.
+        The harness session log is the record of what was processed. Items will
+        remain in pending status and will be picked up again on subsequent calls.
+        """
         pending_rows = self.repository.list_pending_news(limit=limit)
         news_item_ids = [int(row["id"]) for row in pending_rows]
         return self.run_task(TaskInput(

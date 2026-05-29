@@ -71,3 +71,6 @@ def test_run_pending_processes_pending_news(coordinator, tmp_path):
         repo.insert_news_item(_make_item(title))
     result = coordinator.run_pending(limit=10)
     assert result.final_state == LoopState.DONE
+    events = coordinator.session_store.list_events_for_session(result.session_id)
+    tool_call_events = [e for e in events if e["event_type"] == "tool_call"]
+    assert len(tool_call_events) >= 1  # sort_and_analyze was called
