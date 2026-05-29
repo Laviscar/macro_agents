@@ -1,3 +1,5 @@
+import time
+
 from harness.runtime import BaseTool, ToolResult, ToolRuntime
 from harness.policy import PolicyDecision, PolicyEngine, RiskLevel
 
@@ -96,3 +98,56 @@ def test_low_risk_tool_passes_policy():
     result = runtime.execute("low_risk", {})
     assert result.success is True
     assert result.output == "ok"
+
+
+def test_execute_batch_returns_results_in_call_order():
+    runtime = ToolRuntime()
+    runtime.register(EchoTool())
+    results = runtime.execute_batch([("echo", {"message": "a"}), ("echo", {"message": "b"})])
+    assert len(results) == 2
+    assert results[0].output == "a"
+    assert results[1].output == "b"
+
+
+def test_execute_batch_runs_safe_tools_faster_than_serial():
+    class SlowSafeTool(BaseTool):
+        name = "slow_safe"
+        is_concurrency_safe = True
+
+        def execute(self, input: dict) -> ToolResult:
+            time.sleep(0.05)
+            return ToolResult(tool_name=self.name, success=True, output=input.get("id"))
+
+    runtime = ToolRuntime()
+    runtime.register(SlowSafeTool())
+
+    start = time.monotonic()
+    results = runtime.execute_batch([
+        ("slow_safe", {"id": 1}),
+        ("slow_safe", {"id": 2}),
+        ("slow_safe", {"id": 3}),
+    ])
+    elapsed = time.monotonic() - start
+
+    assert all(r.success for r in results)
+    assert elapsed < 0.12  # 3x0.05s serial = 0.15s; parallel ~0.05s
+
+
+def test_execute_batch_runs_unsafe_tools_serially():
+    execution_order: list[str] = []
+
+    class TrackingTool(BaseTool):
+        is_concurrency_safe = False
+
+        def __init__(self, tool_name: str) -> None:
+            self.name = tool_name
+
+        def execute(self, input: dict) -> ToolResult:
+            execution_order.append(self.name)
+            return ToolResult(tool_name=self.name, success=True)
+
+    runtime = ToolRuntime()
+    runtime.register(TrackingTool("first"))
+    runtime.register(TrackingTool("second"))
+    runtime.execute_batch([("first", {}), ("second", {})])
+    assert execution_order == ["first", "second"]

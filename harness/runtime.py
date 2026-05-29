@@ -64,3 +64,36 @@ class ToolRuntime:
     @property
     def tool_names(self) -> list[str]:
         return list(self._tools.keys())
+
+    def execute_batch(self, calls: list[tuple[str, dict]]) -> list[ToolResult]:
+        """Execute multiple tools. Concurrent-safe tools run in parallel; others run serially after.
+
+        Returns results in the same order as calls.
+        """
+        import concurrent.futures
+
+        safe: list[tuple[int, str, dict]] = []
+        unsafe: list[tuple[int, str, dict]] = []
+
+        for i, (name, inp) in enumerate(calls):
+            tool = self._tools.get(name)
+            if tool is not None and tool.is_concurrency_safe:
+                safe.append((i, name, inp))
+            else:
+                unsafe.append((i, name, inp))
+
+        result_map: dict[int, ToolResult] = {}
+
+        if safe:
+            with concurrent.futures.ThreadPoolExecutor(max_workers=len(safe)) as pool:
+                future_to_idx = {
+                    pool.submit(self.execute, name, inp): idx
+                    for idx, name, inp in safe
+                }
+                for future in concurrent.futures.as_completed(future_to_idx):
+                    result_map[future_to_idx[future]] = future.result()
+
+        for idx, name, inp in unsafe:
+            result_map[idx] = self.execute(name, inp)
+
+        return [result_map[i] for i in range(len(calls))]
