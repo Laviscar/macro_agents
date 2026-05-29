@@ -42,3 +42,8 @@ def test_tool_names_lists_registered_tools():
     runtime = ToolRuntime()
     runtime.register(EchoTool())
     assert "echo" in runtime.tool_names
+
+
+def test_tool_result_policy_record_defaults_to_none():
+    result = ToolResult(tool_name="echo", success=True)
+    assert result.policy_record is None

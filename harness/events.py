@@ -14,6 +14,9 @@ class EventType(str, Enum):
     TOOL_CALL = "tool_call"
     TOOL_RESULT = "tool_result"
     BUDGET_CHECK = "budget_check"
+    POLICY_DECISION = "policy_decision"
+    PLAN_DECIDED = "plan_decided"
+    OBSERVE_RESULT = "observe_result"
 
 
 @dataclass

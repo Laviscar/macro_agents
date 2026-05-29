@@ -2,7 +2,10 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from harness.policy import PolicyRecord
 
 
 @dataclass
@@ -11,6 +14,7 @@ class ToolResult:
     success: bool
     output: Any = None
     error: str | None = None
+    policy_record: "PolicyRecord | None" = None
 
 
 class BaseTool(ABC):
