@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+import threading
 from pathlib import Path
 
 from harness.events import LoopEvent
@@ -14,6 +15,8 @@ class HarnessSessionStore:
         self.db_path = Path(db_path)
         self._conn = sqlite3.connect(str(self.db_path), check_same_thread=False)
         self._conn.row_factory = sqlite3.Row
+        self._conn.execute("PRAGMA foreign_keys = ON")
+        self._lock = threading.Lock()
         self._init_schema()
 
     def _init_schema(self) -> None:
@@ -60,52 +63,56 @@ class HarnessSessionStore:
         task_description: str = "",
         news_item_ids: list[int] | None = None,
     ) -> str:
-        session_id = new_id("sess")
-        self._conn.execute(
-            """
-            INSERT INTO harness_sessions
-                (id, status, task_description, news_item_ids_json, created_at)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (session_id, "running", task_description, json.dumps(news_item_ids or []), now_iso()),
-        )
-        self._conn.commit()
-        return session_id
+        with self._lock:
+            session_id = new_id("sess")
+            self._conn.execute(
+                """
+                INSERT INTO harness_sessions
+                    (id, status, task_description, news_item_ids_json, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (session_id, "running", task_description, json.dumps(news_item_ids or []), now_iso()),
+            )
+            self._conn.commit()
+            return session_id
 
     def complete_session(self, session_id: str, result: dict) -> None:
-        cursor = self._conn.execute(
-            "UPDATE harness_sessions SET status='completed', result_json=?, completed_at=? WHERE id=?",
-            (json.dumps(result, ensure_ascii=False), now_iso(), session_id),
-        )
-        self._conn.commit()
-        if cursor.rowcount == 0:
-            raise KeyError(f"Session not found: {session_id}")
+        with self._lock:
+            cursor = self._conn.execute(
+                "UPDATE harness_sessions SET status='completed', result_json=?, completed_at=? WHERE id=?",
+                (json.dumps(result, ensure_ascii=False), now_iso(), session_id),
+            )
+            self._conn.commit()
+            if cursor.rowcount == 0:
+                raise KeyError(f"Session not found: {session_id}")
 
     def fail_session(self, session_id: str, error: str) -> None:
-        cursor = self._conn.execute(
-            "UPDATE harness_sessions SET status='failed', result_json=?, completed_at=? WHERE id=?",
-            (json.dumps({"error": error}), now_iso(), session_id),
-        )
-        self._conn.commit()
-        if cursor.rowcount == 0:
-            raise KeyError(f"Session not found: {session_id}")
+        with self._lock:
+            cursor = self._conn.execute(
+                "UPDATE harness_sessions SET status='failed', result_json=?, completed_at=? WHERE id=?",
+                (json.dumps({"error": error}), now_iso(), session_id),
+            )
+            self._conn.commit()
+            if cursor.rowcount == 0:
+                raise KeyError(f"Session not found: {session_id}")
 
     def record_event(self, event: LoopEvent) -> None:
-        self._conn.execute(
-            """
-            INSERT INTO harness_events
-                (session_id, event_type, state, payload_json, created_at)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (
-                event.session_id,
-                event.event_type,
-                event.state,
-                json.dumps(event.payload, ensure_ascii=False, default=str),
-                event.created_at,
-            ),
-        )
-        self._conn.commit()
+        with self._lock:
+            self._conn.execute(
+                """
+                INSERT INTO harness_events
+                    (session_id, event_type, state, payload_json, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (
+                    event.session_id,
+                    event.event_type,
+                    event.state,
+                    json.dumps(event.payload, ensure_ascii=False, default=str),
+                    event.created_at,
+                ),
+            )
+            self._conn.commit()
 
     def list_events_for_session(self, session_id: str) -> list[dict]:
         rows = self._conn.execute(
@@ -122,13 +129,14 @@ class HarnessSessionStore:
         return [dict(row) for row in rows]
 
     def save_compaction(self, session_id: str, event_count: int, summary: dict) -> str:
-        compaction_id = new_id("cmpct")
-        self._conn.execute(
-            "INSERT INTO harness_compactions (id, session_id, event_count, summary_json, created_at) VALUES (?, ?, ?, ?, ?)",
-            (compaction_id, session_id, event_count, json.dumps(summary, ensure_ascii=False), now_iso()),
-        )
-        self._conn.commit()
-        return compaction_id
+        with self._lock:
+            compaction_id = new_id("cmpct")
+            self._conn.execute(
+                "INSERT INTO harness_compactions (id, session_id, event_count, summary_json, created_at) VALUES (?, ?, ?, ?, ?)",
+                (compaction_id, session_id, event_count, json.dumps(summary, ensure_ascii=False), now_iso()),
+            )
+            self._conn.commit()
+            return compaction_id
 
     def get_compaction(self, session_id: str) -> dict | None:
         row = self._conn.execute(
@@ -141,13 +149,14 @@ class HarnessSessionStore:
         return d
 
     def save_eval_run(self, window_start: str, window_end: str, session_count: int, metrics: dict) -> str:
-        run_id = new_id("eval")
-        self._conn.execute(
-            "INSERT INTO harness_eval_runs (id, window_start_date, window_end_date, session_count, metrics_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (run_id, window_start, window_end, session_count, json.dumps(metrics, ensure_ascii=False), now_iso()),
-        )
-        self._conn.commit()
-        return run_id
+        with self._lock:
+            run_id = new_id("eval")
+            self._conn.execute(
+                "INSERT INTO harness_eval_runs (id, window_start_date, window_end_date, session_count, metrics_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+                (run_id, window_start, window_end, session_count, json.dumps(metrics, ensure_ascii=False), now_iso()),
+            )
+            self._conn.commit()
+            return run_id
 
     def list_eval_runs(self, limit: int = 20) -> list[dict]:
         rows = self._conn.execute(

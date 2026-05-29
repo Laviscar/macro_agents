@@ -111,3 +111,34 @@ def test_save_and_list_eval_runs(tmp_path):
 def test_list_eval_runs_empty(tmp_path):
     store = HarnessSessionStore(tmp_path / "test.db")
     assert store.list_eval_runs() == []
+
+
+def test_foreign_keys_pragma_enabled(tmp_path):
+    store = HarnessSessionStore(tmp_path / "test.db")
+    cur = store._conn.execute("PRAGMA foreign_keys")
+    assert cur.fetchone()[0] == 1
+
+
+def test_concurrent_event_writes_are_not_lost(tmp_path):
+    import threading
+    from harness.events import EventType, LoopEvent
+    store = HarnessSessionStore(tmp_path / "test.db")
+    sess_id = store.create_session()
+
+    def writer():
+        for _ in range(20):
+            store.record_event(LoopEvent(
+                session_id=sess_id,
+                event_type=EventType.LOOP_TRANSITION,
+                state="PLAN",
+                payload={},
+            ))
+
+    threads = [threading.Thread(target=writer) for _ in range(5)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    events = store.list_events_for_session(sess_id)
+    assert len(events) == 100  # 5 threads x 20 events, none lost
