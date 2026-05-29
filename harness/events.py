@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 from utils.clock import now_iso
 
@@ -20,5 +21,5 @@ class LoopEvent:
     session_id: str
     event_type: EventType
     state: str
-    payload: dict
+    payload: dict[str, Any]
     created_at: str = field(default_factory=now_iso)
