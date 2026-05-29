@@ -56,6 +56,19 @@ def test_record_and_list_events(store):
     assert payload["to"] == "PLAN"
 
 
+def test_complete_session_persists_result(store):
+    session_id = store.create_session()
+    store.complete_session(session_id, {"stop_reason": "task_complete"})
+    sessions = store.list_sessions()
+    result = json.loads(sessions[0]["result_json"])
+    assert result["stop_reason"] == "task_complete"
+
+
+def test_complete_session_bad_id_raises(store):
+    with pytest.raises(KeyError):
+        store.complete_session("sess_nonexistent", {})
+
+
 def test_events_ordered_by_insertion(store):
     session_id = store.create_session()
     for state in ["PLAN", "TOOL_EXEC", "OBSERVE"]:

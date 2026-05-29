@@ -57,18 +57,22 @@ class HarnessSessionStore:
         return session_id
 
     def complete_session(self, session_id: str, result: dict) -> None:
-        self._conn.execute(
+        cursor = self._conn.execute(
             "UPDATE harness_sessions SET status='completed', result_json=?, completed_at=? WHERE id=?",
             (json.dumps(result, ensure_ascii=False), now_iso(), session_id),
         )
         self._conn.commit()
+        if cursor.rowcount == 0:
+            raise KeyError(f"Session not found: {session_id}")
 
     def fail_session(self, session_id: str, error: str) -> None:
-        self._conn.execute(
+        cursor = self._conn.execute(
             "UPDATE harness_sessions SET status='failed', result_json=?, completed_at=? WHERE id=?",
             (json.dumps({"error": error}), now_iso(), session_id),
         )
         self._conn.commit()
+        if cursor.rowcount == 0:
+            raise KeyError(f"Session not found: {session_id}")
 
     def record_event(self, event: LoopEvent) -> None:
         self._conn.execute(
