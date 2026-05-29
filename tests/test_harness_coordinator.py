@@ -120,3 +120,30 @@ def test_run_task_accumulates_narrative_across_runs(coordinator, tmp_path):
     state_after_second = load_narrative_state(tmp_path / "storage")
     assert len(state_after_second["commits"]) > commits_after_first
     assert state_after_second["main_narrative"].id == state_after_first["main_narrative"].id
+
+
+def test_run_pending_marks_items_processed(coordinator, tmp_path):
+    repo = SQLiteNewsRepository(tmp_path / "test.sqlite3")
+    for title in ["GDP surprise beats expectations", "Trade deficit widens more than expected"]:
+        repo.insert_news_item(_make_item(title))
+
+    coordinator.run_pending(limit=10)
+
+    # No rows should remain pending after processing.
+    assert repo.list_pending_news(limit=10) == []
+    counts = repo.get_status_counts()
+    assert "pending_sort" not in counts
+    assert "pending_analysis" not in counts
+
+
+def test_run_pending_is_idempotent(coordinator, tmp_path):
+    repo = SQLiteNewsRepository(tmp_path / "test.sqlite3")
+    repo.insert_news_item(_make_item("Inflation cools lower than expected"))
+
+    coordinator.run_pending(limit=10)
+    second = coordinator.run_pending(limit=10)
+
+    # Second run finds nothing pending → no tool_call events for sort_and_analyze.
+    events = coordinator.session_store.list_events_for_session(second.session_id)
+    tool_calls = [e for e in events if e["event_type"] == "tool_call"]
+    assert tool_calls == []

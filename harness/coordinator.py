@@ -85,6 +85,7 @@ class SortAndAnalyzeTool(BaseTool):
         evidence_list: list[Evidence] = []
         processed = 0
         skipped = 0
+        errors = 0
 
         context = {"target_main_narrative_id": "main_default"}
         for nid in news_item_ids:
@@ -92,14 +93,23 @@ class SortAndAnalyzeTool(BaseTool):
             if row is None:
                 continue
             processed += 1
-            resource_card = _load_or_build_resource_card(row, self.sorter)
-            if not resource_card.route_to_analysis:
-                skipped += 1
-                continue
-            card = self.analyst.analyze(resource_card, context=context)
-            evidence = self.analyst.extract_evidence(card, context=context)
-            analysis_cards.append(card)
-            evidence_list.extend(evidence)
+            try:
+                resource_card = _load_or_build_resource_card(row, self.sorter)
+                next_status = "pending_analysis" if resource_card.route_to_analysis else "skipped"
+                self.repository.save_resource_card(nid, resource_card, status=next_status)
+
+                if not resource_card.route_to_analysis:
+                    skipped += 1
+                    continue
+
+                card = self.analyst.analyze(resource_card, context=context)
+                evidence = self.analyst.extract_evidence(card, context=context)
+                self.repository.save_analysis_bundle(nid, card, evidence)
+                analysis_cards.append(card)
+                evidence_list.extend(evidence)
+            except Exception as exc:
+                self.repository.mark_error(nid, str(exc))
+                errors += 1
 
         return ToolResult(
             tool_name=self.name,
@@ -109,6 +119,7 @@ class SortAndAnalyzeTool(BaseTool):
                 "evidence_list": evidence_list,
                 "processed": processed,
                 "skipped": skipped,
+                "errors": errors,
             },
         )
 
@@ -187,9 +198,9 @@ class HarnessCoordinator:
     def run_pending(self, limit: int = 20, time_budget_seconds: float = 300.0) -> LoopResult:
         """Pull pending news items from DB and run a harness task over them.
 
-        Phase 1 note: processed items are NOT marked as analyzed in news_items.
-        The harness session log is the record of what was processed. Items will
-        remain in pending status and will be picked up again on subsequent calls.
+        Processed items are persisted and marked in news_items: routed items
+        become 'analyzed', non-routed become 'skipped', failures become 'error'.
+        Subsequent calls therefore will not reprocess the same rows.
         """
         pending_rows = self.repository.list_pending_news(limit=limit)
         news_item_ids = [int(row["id"]) for row in pending_rows]
