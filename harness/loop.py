@@ -7,6 +7,7 @@ from harness.budget import BudgetGuard
 from harness.events import EventType, LoopEvent
 from harness.runtime import ToolResult, ToolRuntime
 from harness.session_store import HarnessSessionStore
+from schemas.evidence import Evidence
 
 
 class LoopState(str, Enum):
@@ -139,7 +140,7 @@ class NarrativeLoopEngine:
                     raise RuntimeError(f"{tool_name} failed: {result.error}")
 
         elif ctx.current_state == LoopState.OBSERVE:
-            all_evidence: list = []
+            all_evidence: list[Evidence] = []
             total_processed = 0
             for r in ctx.tool_results:
                 if r.success and r.output:
