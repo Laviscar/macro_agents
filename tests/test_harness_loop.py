@@ -147,6 +147,7 @@ def test_plan_sets_planned_tools_when_news_items_present(store, passing_runtime)
     assert len(plan_events) == 1
     payload = _json.loads(plan_events[0]["payload_json"])
     assert "sort_and_analyze" in payload["planned_tools"]
+    assert result.final_state == LoopState.DONE
 
 
 def test_plan_sets_empty_tools_when_no_news_items(store, passing_runtime):

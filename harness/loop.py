@@ -29,7 +29,7 @@ class LoopContext:
     narrative_result: dict | None = None
     stop_reason: str | None = None
     planned_tools: list[str] = field(default_factory=list)
-    all_skipped: bool = False
+    all_skipped: bool = False  # set by OBSERVE handler; prevents UPDATE_NARRATIVE when no evidence
 
 
 @dataclass
@@ -126,7 +126,7 @@ class NarrativeLoopEngine:
                     "success": result.success,
                     "error": result.error,
                     "processed": result.output.get("processed", 0) if result.success and result.output else 0,
-                    "policy_denied": result.policy_record is not None,
+                    "policy_intercepted": result.policy_record is not None,
                 })
                 if result.policy_record is not None:
                     self._emit(ctx, EventType.POLICY_DECISION, {
