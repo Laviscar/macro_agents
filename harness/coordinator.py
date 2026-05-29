@@ -9,6 +9,7 @@ from agents.narrative_manager import NarrativeManagerAgent
 from agents.news_sorter import NewsSorterAgent
 from harness.budget import BudgetConfig, BudgetGuard
 from harness.loop import LoopResult, NarrativeLoopEngine
+from harness.policy import PolicyEngine, RiskLevel
 from harness.runtime import BaseTool, ToolResult, ToolRuntime
 from harness.session_store import HarnessSessionStore
 from pipelines.narrative_update import update_from_evidence
@@ -44,6 +45,8 @@ def _load_or_build_resource_card(row: dict, sorter: NewsSorterAgent) -> Resource
 
 class SortAndAnalyzeTool(BaseTool):
     name = "sort_and_analyze"
+    risk_level = RiskLevel.LOW
+    is_concurrency_safe = True
 
     def __init__(
         self,
@@ -91,6 +94,8 @@ class SortAndAnalyzeTool(BaseTool):
 
 class UpdateNarrativeTool(BaseTool):
     name = "update_narrative"
+    risk_level = RiskLevel.MEDIUM
+    is_concurrency_safe = False
 
     def __init__(
         self,
@@ -173,7 +178,7 @@ class HarnessCoordinator:
         ))
 
     def _build_runtime(self) -> ToolRuntime:
-        runtime = ToolRuntime()
+        runtime = ToolRuntime(policy_engine=PolicyEngine())
         runtime.register(SortAndAnalyzeTool(self.repository, self._sorter, self._analyst))
         runtime.register(UpdateNarrativeTool(self._narrative_manager, self.storage_root))
         return runtime

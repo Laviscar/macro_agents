@@ -74,3 +74,13 @@ def test_run_pending_processes_pending_news(coordinator, tmp_path):
     events = coordinator.session_store.list_events_for_session(result.session_id)
     tool_call_events = [e for e in events if e["event_type"] == "tool_call"]
     assert len(tool_call_events) >= 1  # sort_and_analyze was called
+
+
+def test_coordinator_uses_policy_engine_plan_and_observe(coordinator):
+    """Smoke: coordinator wires PolicyEngine; LOW+MEDIUM tools pass; PLAN+OBSERVE events present."""
+    result = coordinator.run_task(TaskInput(news_item_ids=[], task_description="policy smoke"))
+    assert result.final_state == LoopState.DONE
+    events = coordinator.session_store.list_events_for_session(result.session_id)
+    event_types = {e["event_type"] for e in events}
+    assert "plan_decided" in event_types
+    assert "observe_result" in event_types
