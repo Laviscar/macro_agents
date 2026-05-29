@@ -139,11 +139,35 @@ class NarrativeLoopEngine:
                     raise RuntimeError(f"{tool_name} failed: {result.error}")
 
         elif ctx.current_state == LoopState.OBSERVE:
-            pass  # Phase 1: tool results already verified in TOOL_EXEC
+            all_evidence: list = []
+            total_processed = 0
+            for r in ctx.tool_results:
+                if r.success and r.output:
+                    all_evidence.extend(r.output.get("evidence_list", []))
+                    total_processed += r.output.get("processed", 0)
+
+            if total_processed > 0 and len(all_evidence) == 0:
+                ctx.all_skipped = True
+
+            avg_confidence = (
+                sum(e.confidence for e in all_evidence) / len(all_evidence)
+                if all_evidence else 1.0
+            )
+
+            self._emit(ctx, EventType.OBSERVE_RESULT, {
+                "evidence_count": len(all_evidence),
+                "all_skipped": ctx.all_skipped,
+                "avg_confidence": round(avg_confidence, 3),
+            })
 
         elif ctx.current_state == LoopState.UPDATE_NARRATIVE:
-            if not ctx.tool_results:
-                return  # nothing to narrate when no tools ran
+            if not ctx.tool_results or ctx.all_skipped:
+                self._emit(ctx, EventType.TOOL_RESULT, {
+                    "tool": "update_narrative",
+                    "skipped": True,
+                    "reason": "no_evidence" if ctx.all_skipped else "no_tools_ran",
+                })
+                return
 
             all_evidence = []
             all_analysis_cards = []
