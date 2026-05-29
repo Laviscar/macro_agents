@@ -61,6 +61,7 @@ class NarrativeLoopEngine:
         self._events_count = 0
 
     def run(self, session_id: str, news_item_ids: list[int]) -> LoopResult:
+        self._events_count = 0
         ctx = LoopContext(session_id=session_id, news_item_ids=news_item_ids)
         self._emit(ctx, EventType.SESSION_STARTED, {})
 
@@ -71,9 +72,14 @@ class NarrativeLoopEngine:
                 self._emit(ctx, EventType.LOOP_TRANSITION, {"from": prev, "to": state})
                 self._handle(ctx)
         except Exception as exc:
+            failed_in_state = ctx.current_state  # capture which state raised
             ctx.current_state = LoopState.FAILED
             ctx.stop_reason = str(exc)
-            self._emit(ctx, EventType.LOOP_TRANSITION, {"error": str(exc)})
+            self._emit(ctx, EventType.LOOP_TRANSITION, {
+                "from": failed_in_state,
+                "to": LoopState.FAILED,
+                "error": str(exc),
+            })
             self.session_store.fail_session(session_id, str(exc))
             return LoopResult(
                 session_id=session_id,
