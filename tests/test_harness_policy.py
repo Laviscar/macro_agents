@@ -1,4 +1,3 @@
-import pytest
 from harness.policy import PolicyDecision, PolicyEngine, PolicyRecord, RiskLevel
 
 
@@ -13,6 +12,7 @@ def test_medium_risk_is_allowed():
     engine = PolicyEngine()
     decision, reason = engine.evaluate("write_local", RiskLevel.MEDIUM)
     assert decision == PolicyDecision.ALLOW
+    assert isinstance(reason, str)
 
 
 def test_high_risk_requires_approval():
@@ -49,3 +49,13 @@ def test_policy_decision_string_values():
     assert PolicyDecision.ALLOW == "allow"
     assert PolicyDecision.DENY == "deny"
     assert PolicyDecision.ASK_FOR_APPROVAL == "ask_for_approval"
+
+
+def test_policy_record_is_immutable():
+    import pytest
+    import dataclasses
+
+    engine = PolicyEngine()
+    record = engine.record("tool", RiskLevel.LOW)
+    with pytest.raises(dataclasses.FrozenInstanceError):
+        record.decision = PolicyDecision.DENY  # type: ignore
