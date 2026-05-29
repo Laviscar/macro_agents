@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "sqlite": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "@modelcontextprotocol/server-sqlite",
+        "/Users/luyi/Projets/Macro_analyst/macro_agents/storage/macro_agents.sqlite3"
+      ],
+      "env": {}
+    }
+  }
+}
