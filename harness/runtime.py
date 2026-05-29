@@ -40,6 +40,7 @@ class ToolRuntime:
         if tool_name not in self._tools:
             return ToolResult(tool_name=tool_name, success=False, error=f"Unknown tool: {tool_name}")
         tool = self._tools[tool_name]
+        record = None
         if self._policy_engine is not None:
             record = self._policy_engine.record(tool.name, tool.risk_level)
             if record.decision == PolicyDecision.DENY:
@@ -57,9 +58,12 @@ class ToolRuntime:
                     policy_record=record,
                 )
         try:
-            return self._tools[tool_name].execute(input)
+            result = self._tools[tool_name].execute(input)
         except Exception as exc:
-            return ToolResult(tool_name=tool_name, success=False, error=str(exc))
+            return ToolResult(tool_name=tool_name, success=False, error=str(exc), policy_record=record)
+        if result.policy_record is None:
+            result.policy_record = record
+        return result
 
     @property
     def tool_names(self) -> list[str]:

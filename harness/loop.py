@@ -5,6 +5,7 @@ from enum import Enum
 
 from harness.budget import BudgetGuard
 from harness.events import EventType, LoopEvent
+from harness.policy import PolicyDecision
 from harness.runtime import ToolResult, ToolRuntime
 from harness.session_store import HarnessSessionStore
 from schemas.evidence import Evidence
@@ -125,12 +126,16 @@ class NarrativeLoopEngine:
                 })
                 result = self.runtime.execute(tool_name, {"news_item_ids": ctx.news_item_ids})
                 ctx.tool_results.append(result)
+                intercepted = (
+                    result.policy_record is not None
+                    and result.policy_record.decision != PolicyDecision.ALLOW
+                )
                 self._emit(ctx, EventType.TOOL_RESULT, {
                     "tool": tool_name,
                     "success": result.success,
                     "error": result.error,
                     "processed": result.output.get("processed", 0) if result.success and result.output else 0,
-                    "policy_intercepted": result.policy_record is not None,
+                    "policy_intercepted": intercepted,
                 })
                 if result.policy_record is not None:
                     self._emit(ctx, EventType.POLICY_DECISION, {
@@ -194,6 +199,13 @@ class NarrativeLoopEngine:
                 "success": result.success,
                 "error": result.error,
             })
+            if result.policy_record is not None:
+                self._emit(ctx, EventType.POLICY_DECISION, {
+                    "tool": result.policy_record.tool_name,
+                    "risk_level": result.policy_record.risk_level,
+                    "decision": result.policy_record.decision,
+                    "reason": result.policy_record.reason,
+                })
             if not result.success:
                 raise RuntimeError(f"update_narrative failed: {result.error}")
 

@@ -272,3 +272,39 @@ def test_result_json_has_stop_reason_when_no_narrative(store, passing_runtime):
     result = _json.loads(sessions[0]["result_json"])
     assert result["stop_reason"] == "task_complete"
     assert "main_narrative_id" not in result
+
+
+def test_medium_tool_emits_policy_decision_event(store):
+    from harness.runtime import ToolRuntime, ToolResult
+    from harness.policy import PolicyEngine, RiskLevel
+
+    class LowSort:
+        name = "sort_and_analyze"
+        risk_level = RiskLevel.LOW
+        is_concurrency_safe = True
+        def execute(self, input):
+            return ToolResult(
+                tool_name="sort_and_analyze",
+                success=True,
+                output={"analysis_cards": [], "evidence_list": [], "processed": 0, "skipped": 0},
+            )
+
+    class MediumUpdate:
+        name = "update_narrative"
+        risk_level = RiskLevel.MEDIUM
+        is_concurrency_safe = False
+        def execute(self, input):
+            return ToolResult(tool_name="update_narrative", success=True, output={"main_narrative_id": "main_default"})
+
+    runtime = ToolRuntime(policy_engine=PolicyEngine())
+    runtime.register(LowSort())
+    runtime.register(MediumUpdate())
+    budget = BudgetGuard(BudgetConfig(time_budget_seconds=60.0))
+    engine = NarrativeLoopEngine(runtime=runtime, session_store=store, budget=budget)
+    session_id = store.create_session()
+    engine.run(session_id=session_id, news_item_ids=[1])
+    events = store.list_events_for_session(session_id)
+    policy_events = [e for e in events if e["event_type"] == "policy_decision"]
+    decisions = {_json.loads(e["payload_json"])["decision"] for e in policy_events}
+    assert "allow" in decisions
+    assert len(policy_events) >= 2

@@ -151,3 +151,32 @@ def test_execute_batch_runs_unsafe_tools_serially():
     runtime.register(TrackingTool("second"))
     runtime.execute_batch([("first", {}), ("second", {})])
     assert execution_order == ["first", "second"]
+
+
+def test_allow_tool_attaches_policy_record():
+    class MediumWriteTool(BaseTool):
+        name = "medium_write"
+        risk_level = RiskLevel.MEDIUM
+
+        def execute(self, input: dict) -> ToolResult:
+            return ToolResult(tool_name=self.name, success=True, output="written")
+
+    runtime = ToolRuntime(policy_engine=PolicyEngine())
+    runtime.register(MediumWriteTool())
+    result = runtime.execute("medium_write", {})
+    assert result.success is True
+    assert result.policy_record is not None
+    assert result.policy_record.decision == PolicyDecision.ALLOW
+
+
+def test_no_policy_engine_leaves_record_none():
+    class PlainTool(BaseTool):
+        name = "plain"
+
+        def execute(self, input: dict) -> ToolResult:
+            return ToolResult(tool_name=self.name, success=True)
+
+    runtime = ToolRuntime()  # no policy engine
+    runtime.register(PlainTool())
+    result = runtime.execute("plain", {})
+    assert result.policy_record is None
