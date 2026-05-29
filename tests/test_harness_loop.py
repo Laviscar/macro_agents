@@ -250,3 +250,25 @@ def test_observe_all_skipped_skips_update_narrative(store):
     session_id = store.create_session()
     engine.run(session_id=session_id, news_item_ids=[1])
     assert len(update_called) == 0
+
+
+def test_result_json_includes_narrative_result(store, passing_runtime):
+    budget = BudgetGuard(BudgetConfig(time_budget_seconds=60.0))
+    engine = NarrativeLoopEngine(runtime=passing_runtime, session_store=store, budget=budget)
+    session_id = store.create_session()
+    engine.run(session_id=session_id, news_item_ids=[1, 2])
+    sessions = store.list_sessions()
+    result = _json.loads(sessions[0]["result_json"])
+    assert result["main_narrative_id"] == "main_default"
+    assert result["stop_reason"] == "task_complete"
+
+
+def test_result_json_has_stop_reason_when_no_narrative(store, passing_runtime):
+    budget = BudgetGuard(BudgetConfig(time_budget_seconds=60.0))
+    engine = NarrativeLoopEngine(runtime=passing_runtime, session_store=store, budget=budget)
+    session_id = store.create_session()
+    engine.run(session_id=session_id, news_item_ids=[])  # empty plan → no narrative update
+    sessions = store.list_sessions()
+    result = _json.loads(sessions[0]["result_json"])
+    assert result["stop_reason"] == "task_complete"
+    assert "main_narrative_id" not in result

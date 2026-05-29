@@ -93,8 +93,11 @@ class NarrativeLoopEngine:
             )
 
         ctx.current_state = LoopState.DONE
-        self._emit(ctx, EventType.SESSION_COMPLETED, {"stop_reason": ctx.stop_reason})
-        self.session_store.complete_session(session_id, {"stop_reason": ctx.stop_reason})
+        result_payload: dict = {"stop_reason": ctx.stop_reason}
+        if ctx.narrative_result:
+            result_payload.update(ctx.narrative_result)
+        self._emit(ctx, EventType.SESSION_COMPLETED, result_payload)
+        self.session_store.complete_session(session_id, result_payload)
         return LoopResult(
             session_id=session_id,
             final_state=LoopState.DONE,
