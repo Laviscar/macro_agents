@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 from dataclasses import dataclass
+from typing import Literal
 
 
 @dataclass
@@ -10,15 +11,16 @@ class BudgetConfig:
     token_budget: int = 0  # 0 = no token limit (Phase 1: rule-based agents use 0 tokens)
 
 
-@dataclass
+@dataclass(frozen=True)
 class BudgetStatus:
     ok: bool
-    reason: str | None
+    reason: Literal["time_exceeded", "token_exceeded"] | None
     elapsed_seconds: float
     tokens_used: int
 
 
 class BudgetGuard:
+    """One instance per task session — _start_time is set at construction and never reset."""
     def __init__(self, config: BudgetConfig) -> None:
         self.config = config
         self.tokens_used: int = 0
