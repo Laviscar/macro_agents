@@ -29,3 +29,19 @@ def test_sqlite_news_repository_deduplicates_news_items(tmp_path: Path) -> None:
     assert repository.count_news_items() == 1
     rows = repository.list_news_items(limit=10)
     assert rows[0]["analysis_status"] == "pending_sort"
+
+
+def test_get_news_item_returns_row(tmp_path: Path) -> None:
+    repository = SQLiteNewsRepository(tmp_path / "macro.sqlite3")
+    sample_item = make_raw_news_item()
+    inserted_id = repository.insert_news_item(sample_item)
+    row = repository.get_news_item(inserted_id)
+    assert row is not None
+    assert row["title"] == sample_item.title
+    assert row["id"] == inserted_id
+
+
+def test_get_news_item_returns_none_for_missing_id(tmp_path: Path) -> None:
+    repository = SQLiteNewsRepository(tmp_path / "macro.sqlite3")
+    result = repository.get_news_item(999999)
+    assert result is None

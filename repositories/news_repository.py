@@ -145,6 +145,13 @@ class SQLiteNewsRepository:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def get_news_item(self, news_item_id: int) -> dict | None:
+        row = self.connection.execute(
+            "SELECT * FROM news_items WHERE id = ?",
+            (news_item_id,),
+        ).fetchone()
+        return dict(row) if row is not None else None
+
     def save_resource_card(self, news_item_id: int, resource_card: ResourceCard, status: str) -> None:
         self.connection.execute(
             """
