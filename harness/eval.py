@@ -21,10 +21,12 @@ class EvalScheduler:
 
     def run_eval(self, window_start: str, window_end: str) -> EvalReport:
         all_sessions = self._store.list_sessions(limit=10000)
+        start_day = window_start[:10]
+        end_day = window_end[:10]
         in_window = [
             s for s in all_sessions
             if s["status"] == "completed"
-            and window_start <= s["created_at"] <= window_end
+            and start_day <= s["created_at"][:10] <= end_day
         ]
 
         events_by_session: dict[str, list[dict]] = {

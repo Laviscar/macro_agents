@@ -80,3 +80,14 @@ def test_run_eval_multiple_calls_accumulate_runs(tmp_path):
     scheduler.run_eval(window_start="2020-01-01", window_end="2030-01-01")
     scheduler.run_eval(window_start="2020-01-01", window_end="2030-01-01")
     assert len(store.list_eval_runs()) == 2
+
+
+def test_run_eval_includes_session_created_today(tmp_path):
+    from datetime import date
+    store = _make_store(tmp_path)
+    _seed_completed_session(store)
+    today = date.today().isoformat()
+    scheduler = EvalScheduler(store)
+    # window_end is today's DATE; the session's created_at is today's full timestamp.
+    report = scheduler.run_eval(window_start=today, window_end=today)
+    assert report.session_count == 1
