@@ -75,3 +75,39 @@ def test_events_ordered_by_insertion(store):
         store.record_event(LoopEvent(session_id=session_id, event_type=EventType.LOOP_TRANSITION, state=state, payload={}))
     events = store.list_events_for_session(session_id)
     assert [e["state"] for e in events] == ["PLAN", "TOOL_EXEC", "OBSERVE"]
+
+
+def test_save_and_get_compaction(tmp_path):
+    store = HarnessSessionStore(tmp_path / "test.db")
+    sess_id = store.create_session(task_description="test", news_item_ids=[1, 2])
+    summary = {"news_processed": 2, "evidence_count": 3, "avg_confidence": 0.85, "narrative_id": "main_default"}
+    cid = store.save_compaction(sess_id, event_count=10, summary=summary)
+    assert cid.startswith("cmpct")
+    result = store.get_compaction(sess_id)
+    assert result is not None
+    assert result["event_count"] == 10
+    assert result["summary"]["evidence_count"] == 3
+
+
+def test_get_compaction_returns_none_for_missing_session(tmp_path):
+    store = HarnessSessionStore(tmp_path / "test.db")
+    assert store.get_compaction("nonexistent") is None
+
+
+def test_save_and_list_eval_runs(tmp_path):
+    store = HarnessSessionStore(tmp_path / "test.db")
+    metrics = {
+        "narrative_stability": 1.0, "evidence_precision": 0.8,
+        "challenge_hit_rate": 1.0, "latency_seconds": 1.2, "tokens_used": 0,
+    }
+    rid = store.save_eval_run("2026-05-01", "2026-05-07", session_count=5, metrics=metrics)
+    assert rid.startswith("eval")
+    runs = store.list_eval_runs()
+    assert len(runs) == 1
+    assert runs[0]["metrics"]["narrative_stability"] == 1.0
+    assert runs[0]["session_count"] == 5
+
+
+def test_list_eval_runs_empty(tmp_path):
+    store = HarnessSessionStore(tmp_path / "test.db")
+    assert store.list_eval_runs() == []

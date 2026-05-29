@@ -36,6 +36,22 @@ class HarnessSessionStore:
                 created_at TEXT NOT NULL,
                 FOREIGN KEY(session_id) REFERENCES harness_sessions(id)
             );
+            CREATE TABLE IF NOT EXISTS harness_compactions (
+                id TEXT PRIMARY KEY,
+                session_id TEXT NOT NULL UNIQUE,
+                event_count INTEGER NOT NULL,
+                summary_json TEXT NOT NULL,
+                created_at TEXT NOT NULL,
+                FOREIGN KEY(session_id) REFERENCES harness_sessions(id)
+            );
+            CREATE TABLE IF NOT EXISTS harness_eval_runs (
+                id TEXT PRIMARY KEY,
+                window_start_date TEXT NOT NULL,
+                window_end_date TEXT NOT NULL,
+                session_count INTEGER NOT NULL,
+                metrics_json TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
         """)
         self._conn.commit()
 
@@ -104,3 +120,42 @@ class HarnessSessionStore:
             (limit,),
         ).fetchall()
         return [dict(row) for row in rows]
+
+    def save_compaction(self, session_id: str, event_count: int, summary: dict) -> str:
+        compaction_id = new_id("cmpct")
+        self._conn.execute(
+            "INSERT INTO harness_compactions (id, session_id, event_count, summary_json, created_at) VALUES (?, ?, ?, ?, ?)",
+            (compaction_id, session_id, event_count, json.dumps(summary, ensure_ascii=False), now_iso()),
+        )
+        self._conn.commit()
+        return compaction_id
+
+    def get_compaction(self, session_id: str) -> dict | None:
+        row = self._conn.execute(
+            "SELECT * FROM harness_compactions WHERE session_id=?", (session_id,)
+        ).fetchone()
+        if row is None:
+            return None
+        d = dict(row)
+        d["summary"] = json.loads(d.pop("summary_json"))
+        return d
+
+    def save_eval_run(self, window_start: str, window_end: str, session_count: int, metrics: dict) -> str:
+        run_id = new_id("eval")
+        self._conn.execute(
+            "INSERT INTO harness_eval_runs (id, window_start_date, window_end_date, session_count, metrics_json, created_at) VALUES (?, ?, ?, ?, ?, ?)",
+            (run_id, window_start, window_end, session_count, json.dumps(metrics, ensure_ascii=False), now_iso()),
+        )
+        self._conn.commit()
+        return run_id
+
+    def list_eval_runs(self, limit: int = 20) -> list[dict]:
+        rows = self._conn.execute(
+            "SELECT * FROM harness_eval_runs ORDER BY created_at DESC LIMIT ?", (limit,)
+        ).fetchall()
+        result = []
+        for row in rows:
+            d = dict(row)
+            d["metrics"] = json.loads(d.pop("metrics_json"))
+            result.append(d)
+        return result
