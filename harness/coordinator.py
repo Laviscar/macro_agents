@@ -15,9 +15,14 @@ from harness.session_store import HarnessSessionStore
 from pipelines.narrative_update import update_from_evidence
 from repositories.news_repository import SQLiteNewsRepository
 from schemas.analysis_card import AnalysisCard
+from schemas.branch_narrative import BranchNarrative
+from schemas.challenge_alert import ChallengeAlert
 from schemas.evidence import Evidence
+from schemas.main_narrative import MainNarrative
+from schemas.narrative_commit import NarrativeCommit
 from schemas.resource_card import ResourceCard
-from utils.io import ensure_dir, write_model, write_models
+from schemas.scenario_split import ScenarioSplit
+from utils.io import ensure_dir, read_models, write_model, write_models
 
 _DEFAULT_STORAGE_ROOT = Path("storage")
 
@@ -41,6 +46,22 @@ def _load_or_build_resource_card(row: dict, sorter: NewsSorterAgent) -> Resource
     payload.setdefault("summary", row["summary"])
     payload.setdefault("timestamp", row["published_at"] or row["fetched_at"])
     return sorter.process(payload)
+
+
+def load_narrative_state(storage_root: str | Path) -> dict | None:
+    """Rebuild the narrative state dict from disk, or None if no main narrative exists yet."""
+    root = Path(storage_root)
+    mains = read_models(root / "main_narrative_state", MainNarrative)
+    if not mains:
+        return None
+    main = next((m for m in mains if m.id == "main_default"), mains[0])
+    return {
+        "main_narrative": main,
+        "branches": read_models(root / "branch_narrative_state", BranchNarrative),
+        "commits": read_models(root / "narrative_commits", NarrativeCommit),
+        "alerts": read_models(root / "alerts", ChallengeAlert),
+        "scenarios": read_models(root / "scenarios", ScenarioSplit),
+    }
 
 
 class SortAndAnalyzeTool(BaseTool):
@@ -109,11 +130,12 @@ class UpdateNarrativeTool(BaseTool):
         evidence_list: list[Evidence] = input["evidence_list"]
         analysis_cards: list[AnalysisCard] = input["analysis_cards"]
 
+        prior_state = load_narrative_state(self.storage_root)
         state = update_from_evidence(
             evidence_list=evidence_list,
             analysis_cards=analysis_cards,
             agent=self.narrative_manager,
-            state=None,  # Phase 1: fresh state per run
+            state=prior_state,
         )
 
         main_narrative = state["main_narrative"]

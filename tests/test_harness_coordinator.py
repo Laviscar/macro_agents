@@ -84,3 +84,39 @@ def test_coordinator_uses_policy_engine_plan_and_observe(coordinator):
     event_types = {e["event_type"] for e in events}
     assert "plan_decided" in event_types
     assert "observe_result" in event_types
+
+
+def test_load_narrative_state_returns_none_when_empty(tmp_path):
+    from harness.coordinator import load_narrative_state
+    assert load_narrative_state(tmp_path / "storage") is None
+
+
+def _make_routable_item(title: str) -> RawNewsItem:
+    # Routing is score-driven (sorter compares analysis_readiness_score to a
+    # threshold), not title-driven. Elevated scores in raw_payload ensure the
+    # item routes to analysis and produces evidence -> a narrative commit.
+    item = _make_item(title)
+    item.raw_payload = {
+        "importance_score": 0.9,
+        "structural_score": 0.9,
+        "verifiability_score": 0.9,
+    }
+    return item
+
+
+def test_run_task_accumulates_narrative_across_runs(coordinator, tmp_path):
+    repo = SQLiteNewsRepository(tmp_path / "test.sqlite3")
+    nid1 = repo.insert_news_item(_make_routable_item("Inflation cools sharply, conflicts with hawkish stance"))
+    coordinator.run_task(TaskInput(news_item_ids=[nid1]))
+
+    from harness.coordinator import load_narrative_state
+    state_after_first = load_narrative_state(tmp_path / "storage")
+    assert state_after_first is not None
+    commits_after_first = len(state_after_first["commits"])
+
+    nid2 = repo.insert_news_item(_make_routable_item("GDP surprise supports the growth thesis strongly"))
+    coordinator.run_task(TaskInput(news_item_ids=[nid2]))
+
+    state_after_second = load_narrative_state(tmp_path / "storage")
+    assert len(state_after_second["commits"]) > commits_after_first
+    assert state_after_second["main_narrative"].id == state_after_first["main_narrative"].id
