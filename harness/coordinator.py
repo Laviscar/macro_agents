@@ -67,7 +67,9 @@ def load_narrative_state(storage_root: str | Path) -> dict | None:
 class SortAndAnalyzeTool(BaseTool):
     name = "sort_and_analyze"
     risk_level = RiskLevel.LOW
-    is_concurrency_safe = True
+    # Writes to the shared SQLite connection (save_resource_card / save_analysis_bundle),
+    # so it must not run concurrently with itself via execute_batch.
+    is_concurrency_safe = False
 
     def __init__(
         self,
