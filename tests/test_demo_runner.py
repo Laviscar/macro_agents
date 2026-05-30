@@ -1,6 +1,15 @@
 from pathlib import Path
 
+import demo_runner
 from demo_runner import run_demo
+
+
+def test_demo_default_output_is_sandbox_not_production() -> None:
+    # Foundation contract: demo_runner clears its output each run, so its default
+    # output must be an isolated sandbox, never the production storage/ that
+    # run_harness accumulates and the UI reads.
+    assert demo_runner.DEMO_STORAGE_ROOT == demo_runner.STORAGE_ROOT / "demo"
+    assert demo_runner.DEMO_STORAGE_ROOT != demo_runner.STORAGE_ROOT
 
 
 def test_demo_runner_writes_storage_outputs(tmp_path: Path) -> None:

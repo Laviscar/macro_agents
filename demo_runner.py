@@ -19,6 +19,9 @@ from utils.knowledge_loader import KnowledgeLoader
 PROJECT_ROOT = Path(__file__).resolve().parent
 EXAMPLES_ROOT = PROJECT_ROOT / "examples"
 STORAGE_ROOT = PROJECT_ROOT / "storage"
+# demo_runner is an OFFLINE SANDBOX: it clears its output dir each run, so it must
+# never write to the production storage/ that run_harness accumulates and the UI reads.
+DEMO_STORAGE_ROOT = STORAGE_ROOT / "demo"
 
 
 def run_demo(
@@ -27,7 +30,7 @@ def run_demo(
     llm_client=None,
 ) -> dict:
     input_path = sample_news_path or EXAMPLES_ROOT / "sample_news.json"
-    output_root = storage_root or STORAGE_ROOT
+    output_root = storage_root or DEMO_STORAGE_ROOT
 
     raw_items = load_raw_news(str(input_path))
     knowledge_loader = KnowledgeLoader(str(PROJECT_ROOT / "knowledge" / "registry.yaml"))

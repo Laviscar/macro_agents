@@ -106,16 +106,18 @@ python demo_runner.py
 
 - `examples/sample_news.json`
 
-默认输出目录：
+默认输出目录(demo 是**离线沙箱**,写到 `storage/demo/`,不碰生产数据 —— 见 `docs/DATA_FLOW.md`):
 
-- `storage/resource_cards/`
-- `storage/analysis_archive/`
-- `storage/evidence/`
-- `storage/main_narrative_state/`
-- `storage/branch_narrative_state/`
-- `storage/narrative_commits/`
-- `storage/scenarios/`
-- `storage/alerts/`
+- `storage/demo/resource_cards/`
+- `storage/demo/analysis_archive/`
+- `storage/demo/evidence/`
+- `storage/demo/main_narrative_state/`
+- `storage/demo/branch_narrative_state/`
+- `storage/demo/narrative_commits/`
+- `storage/demo/scenarios/`
+- `storage/demo/alerts/`
+
+> 给 UI / 时间线供数的是 **`run_harness.py`**(累积、不清空),不是 demo。数据契约见 `docs/DATA_FLOW.md`。
 
 ## 如何运行 Tests
 
