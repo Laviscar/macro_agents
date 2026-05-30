@@ -38,3 +38,13 @@ def test_run_once_runs_all_stages_regardless_of_interval():
     loop = RunLoop([Stage("a", interval_seconds=99999, run_fn=lambda: ran.append("a"))])
     loop.run_once()
     assert ran == ["a"]
+
+
+def test_run_once_returns_per_stage_results():
+    loop = RunLoop([
+        Stage("a", interval_seconds=10, run_fn=lambda: {"n": 1}),
+        Stage("b", interval_seconds=10, run_fn=lambda: (_ for _ in ()).throw(RuntimeError("boom"))),
+    ])
+    results = loop.run_once()
+    assert results[0] == {"stage": "a", "ok": True, "result": {"n": 1}}
+    assert results[1]["stage"] == "b" and results[1]["ok"] is False and "boom" in results[1]["error"]

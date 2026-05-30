@@ -40,13 +40,18 @@ class RunLoop:
             except Exception as exc:  # isolate; never crash the loop
                 log_event(self._logger, "stage_failed", stage=stage.name, error=str(exc))
 
-    def run_once(self) -> None:
-        """Run every stage once, ignoring intervals (for manual/test runs)."""
+    def run_once(self) -> list[dict]:
+        """Run every stage once, ignoring intervals (for manual/test runs).
+        Returns a per-stage summary list."""
+        results: list[dict] = []
         for stage in self.stages:
             try:
-                stage.run_fn()
+                result = stage.run_fn()
+                results.append({"stage": stage.name, "ok": True, "result": result})
             except Exception as exc:
                 log_event(self._logger, "stage_failed", stage=stage.name, error=str(exc))
+                results.append({"stage": stage.name, "ok": False, "error": str(exc)})
+        return results
 
     def stop(self) -> None:
         self._stop.set()

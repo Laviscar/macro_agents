@@ -83,6 +83,16 @@ def main() -> None:
 
     with system_tab:
         st.caption("系统运行视图：给开发/运维看，不是产品价值面。")
+        if st.button("⚡ 立即跑全链路 (Run now)", type="primary"):
+            with st.spinner("抓取 → 筛选(便宜LLM) → 分析(推理LLM) → 整合叙事… 推理模型较慢,请稍候"):
+                from run_loop import build_run_loop
+                results = build_run_loop(db_path=str(db_path), storage_root=str(STORAGE_ROOT)).run_once()
+            st.success("全链路已跑完一轮。切到「今日叙事/叙事/分歧预警」查看更新(可能需刷新)。")
+            for r in results:
+                if r.get("ok"):
+                    st.write(f"✅ {r['stage']}: {r.get('result')}")
+                else:
+                    st.error(f"❌ {r['stage']}: {r.get('error')}")
         health_tab, qa_tab = st.tabs(["运行健康", "抓取自检 (fixture)"])
         with health_tab:
             _render_operations_view(st, operations)
