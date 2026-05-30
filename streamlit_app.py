@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from presenters.briefing_presenter import build_briefing_overview
+from presenters.challenges_presenter import build_challenges_overview
 from presenters.timeline_presenter import build_narrative_timeline
 from presenters.data_presenter import build_debug_payload, build_news_detail_view, build_news_list_items
 from presenters.ingestion_presenter import build_ingestion_qa_overview
@@ -12,7 +13,7 @@ from presenters.operations_presenter import build_operations_overview
 from presenters.research_presenter import build_research_overview
 from repositories.news_repository import SQLiteNewsRepository
 from view_models.ingestion_qa import IngestionQAOverview
-from view_models.research_overview import ChallengeBranchCard, MainNarrativeCard, ResearchOverview
+from view_models.research_overview import MainNarrativeCard, ResearchOverview
 from view_models.warehouse_detail import NewsDetailView, NewsListItem
 from utils.dotenv import load_dotenv
 
@@ -50,6 +51,7 @@ def main() -> None:
     repository = SQLiteNewsRepository(db_path)
     briefing = build_briefing_overview(STORAGE_ROOT)
     timeline = build_narrative_timeline(STORAGE_ROOT)
+    challenges = build_challenges_overview(STORAGE_ROOT)
     research = build_research_overview(STORAGE_ROOT)
     operations = build_operations_overview(repository, STORAGE_ROOT)
     ingestion_qa = build_ingestion_qa_overview(DEFAULT_INGESTION_QA_REPORT)
@@ -60,18 +62,21 @@ def main() -> None:
     st.title("Macro Agents Research Workbench")
     st.caption("页面只负责展示；底层状态会先翻译成 view models，再交给 UI 渲染。")
 
-    briefing_tab, narrative_tab, workbench_tab, system_tab = st.tabs(
-        ["今日叙事", "叙事", "新闻工作台", "系统"]
+    briefing_tab, narrative_tab, challenges_tab, workbench_tab, system_tab = st.tabs(
+        ["今日叙事", "叙事", "分歧预警", "新闻工作台", "系统"]
     )
 
     with briefing_tab:
         _render_briefing_view(st, briefing)
 
     with narrative_tab:
-        # 叙事页 = 演变时间线 + 当前主线/分歧（后续再加 P4 溯源）
+        # 叙事页 = 演变时间线 + 当前主线（挑战分支独立到「分歧预警」页；后续再加 P4 溯源）
         _render_timeline_view(st, timeline)
         st.divider()
         _render_research_view(st, research)
+
+    with challenges_tab:
+        _render_challenges_view(st, challenges)
 
     with workbench_tab:
         _render_data_view(st, repository, news_items, data_rows)
@@ -188,6 +193,46 @@ def _render_timeline_view(st: Any, t: Any) -> None:
                 )
 
 
+def _render_challenges_view(st: Any, c: Any) -> None:
+    st.subheader("分歧预警 · Challenges & Alerts")
+    st.caption("什么在动摇主线、概率多高、会走向哪个情景 —— 共识何时可能裂开。")
+
+    if not c.available:
+        st.info("当前没有挑战分支或预警。出现 conflicts/lowers 类证据时，这里会生成分支。")
+        return
+
+    st.info(c.headline)
+
+    # 预警（高概率、已触发）
+    st.markdown("### 🔔 预警")
+    if not c.alerts:
+        st.caption("当前没有触发级预警（挑战概率达到阈值才触发）。")
+    else:
+        for alert in c.alerts:
+            st.error(
+                f"**{alert.challenged_claim}**　挑战概率 {round(alert.challenge_probability * 100)}%"
+                + (f"\n\n来源分支：{alert.branch_title}" if alert.branch_title else "")
+                + (f"\n\n关键触发点：{' · '.join(alert.key_triggers)}" if alert.key_triggers else "")
+            )
+
+    # 全部挑战分支（按概率排序）
+    st.markdown("### 挑战分支（按概率排序）")
+    for item in c.challenges:
+        with st.container(border=True):
+            st.markdown(f"**{item.title}**　`{item.status}`　挑战概率 {round(item.challenge_probability * 100)}%")
+            st.progress(min(max(item.challenge_probability, 0.0), 1.0))
+            if item.core_claims:
+                st.write("核心主张：" + "；".join(item.core_claims))
+            if item.key_triggers:
+                st.caption("关键触发点：" + " · ".join(item.key_triggers))
+            st.caption(f"分支强度 {round(item.branch_strength * 100)}% · 支撑证据 {item.supporting_evidence_count} 条")
+            if item.scenario is not None:
+                s = item.scenario
+                a_col, b_col = st.columns(2)
+                a_col.metric(f"情景A · {s.scenario_a_name}", f"{round(s.scenario_a_prob * 100)}%")
+                b_col.metric(f"情景B · {s.scenario_b_name}", f"{round(s.scenario_b_prob * 100)}%")
+
+
 def _render_research_view(st: Any, overview: ResearchOverview) -> None:
     st.subheader("Research")
     st.caption("首页先回答：当前主线是什么、稳不稳、哪些因素在强化或挑战它。")
@@ -216,12 +261,8 @@ def _render_research_view(st: Any, overview: ResearchOverview) -> None:
         st.markdown("### 主线摘要")
         st.write(lead_card.summary)
 
-    st.markdown("### Challenge Branches")
-    if not overview.challenge_branches:
-        st.info("当前没有成型挑战分支。")
-    else:
-        for branch in overview.challenge_branches:
-            _render_branch_card(st, branch)
+    if overview.challenge_branches:
+        st.caption(f"⚔️ 当前有 {len(overview.challenge_branches)} 条挑战分支 —— 详见「分歧预警」页。")
 
 
 def _render_operations_view(st: Any, overview: Any) -> None:
@@ -446,14 +487,6 @@ def _render_main_narrative_card(st: Any, card: MainNarrativeCard) -> None:
             f"strength {_format_confidence(card.strength)} | confidence {_format_confidence(card.confidence)} | "
             f"challenge branches {card.challenge_count}"
         )
-
-
-def _render_branch_card(st: Any, card: ChallengeBranchCard) -> None:
-    with st.container(border=True):
-        st.markdown(f"**{card.title}**")
-        st.write(f"状态：{card.status}")
-        st.write(card.headline)
-        _render_list_section(st, "关键触发点", card.key_triggers, "暂无关键触发点。")
 
 
 def _render_news_detail(st: Any, detail: NewsDetailView) -> None:
