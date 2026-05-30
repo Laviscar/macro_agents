@@ -89,6 +89,23 @@ def load_narrative_state(storage_root: str | Path) -> dict | None:
     }
 
 
+def persist_narrative_state(state: dict, storage_root: str | Path) -> dict:
+    """Write a narrative state dict to storage/ and return a small summary."""
+    root = Path(storage_root)
+    main_narrative = state["main_narrative"]
+    ensure_dir(root / "main_narrative_state")
+    write_model(root / "main_narrative_state" / f"{main_narrative.id}.json", main_narrative)
+    write_models(root / "branch_narrative_state", state["branches"])
+    write_models(root / "narrative_commits", state["commits"])
+    write_models(root / "alerts", state["alerts"])
+    write_models(root / "scenarios", state["scenarios"])
+    return {
+        "main_narrative_id": main_narrative.id,
+        "branches_count": len(state["branches"]),
+        "commits_count": len(state["commits"]),
+    }
+
+
 class SortAndAnalyzeTool(BaseTool):
     name = "sort_and_analyze"
     risk_level = RiskLevel.LOW
@@ -186,26 +203,8 @@ class UpdateNarrativeTool(BaseTool):
             updates["core_claims"] = [read_line]
         state["main_narrative"] = current_main.model_copy(update=updates)
 
-        main_narrative = state["main_narrative"]
-        ensure_dir(self.storage_root / "main_narrative_state")
-        write_model(
-            self.storage_root / "main_narrative_state" / f"{main_narrative.id}.json",
-            main_narrative,
-        )
-        write_models(self.storage_root / "branch_narrative_state", state["branches"])
-        write_models(self.storage_root / "narrative_commits", state["commits"])
-        write_models(self.storage_root / "alerts", state["alerts"])
-        write_models(self.storage_root / "scenarios", state["scenarios"])
-
-        return ToolResult(
-            tool_name=self.name,
-            success=True,
-            output={
-                "main_narrative_id": main_narrative.id,
-                "branches_count": len(state["branches"]),
-                "commits_count": len(state["commits"]),
-            },
-        )
+        summary = persist_narrative_state(state, self.storage_root)
+        return ToolResult(tool_name=self.name, success=True, output=summary)
 
 
 class HarnessCoordinator:
