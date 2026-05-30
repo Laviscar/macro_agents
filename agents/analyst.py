@@ -17,6 +17,11 @@ _VALID_MAINLINE_RELATIONS = {
 }
 _VALID_SIGNAL_LEVELS = {"fact", "product", "structure", "institution", "theme_candidate"}
 
+# Generous cap so reasoning models (which spend output tokens on hidden reasoning
+# before emitting the answer) can finish and return the JSON answer. The cap is
+# only an upper bound — non-reasoning models stop early and are not charged for it.
+_LLM_MAX_TOKENS = 4096
+
 
 class AnalystAgent:
     """负责高信号事件分析与 Evidence 提炼。"""
@@ -96,7 +101,7 @@ class AnalystAgent:
         response = self._llm_client.complete(
             [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
             temperature=0.0,
-            max_tokens=700,
+            max_tokens=_LLM_MAX_TOKENS,
         )
         data = json.loads(response.text)  # ValueError on bad JSON → caught by dispatcher
 
@@ -203,7 +208,7 @@ class AnalystAgent:
         response = self._llm_client.complete(
             [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
             temperature=0.0,
-            max_tokens=400,
+            max_tokens=_LLM_MAX_TOKENS,
         )
         data = json.loads(response.text)
 

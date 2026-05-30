@@ -301,7 +301,7 @@ class NarrativeManagerAgent:
         response = self._llm_client.complete(
             [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
             temperature=0.0,
-            max_tokens=300,
+            max_tokens=4096,  # generous cap so reasoning models can finish (only an upper bound)
         )
         data = json.loads(response.text)
         open_branch = data["open_branch"]

@@ -10,6 +10,8 @@ from pipelines.clean import process_raw_items
 from pipelines.evidence_extract import extract_evidence_from_analysis
 from pipelines.ingest import load_raw_news
 from pipelines.narrative_update import update_from_evidence
+from llm.config import load_llm_config
+from llm.factory import build_llm_client
 from utils.io import clear_json_files, write_json, write_model, write_models
 from utils.knowledge_loader import KnowledgeLoader
 
@@ -22,6 +24,7 @@ STORAGE_ROOT = PROJECT_ROOT / "storage"
 def run_demo(
     sample_news_path: Path | None = None,
     storage_root: Path | None = None,
+    llm_client=None,
 ) -> dict:
     input_path = sample_news_path or EXAMPLES_ROOT / "sample_news.json"
     output_root = storage_root or STORAGE_ROOT
@@ -29,18 +32,25 @@ def run_demo(
     raw_items = load_raw_news(str(input_path))
     knowledge_loader = KnowledgeLoader(str(PROJECT_ROOT / "knowledge" / "registry.yaml"))
 
+    # Build an LLM client from the environment unless one is injected (tests inject).
+    # No key configured → None → both agents run rule-based (identical to before).
+    if llm_client is None:
+        llm_client = build_llm_client(load_llm_config())
+
     sorter = NewsSorterAgent()
     analyst = AnalystAgent(
         knowledge_context=knowledge_loader.load_context(
             "analyst",
             tasks=["analyze_event", "extract_evidence"],
-        )
+        ),
+        llm_client=llm_client,
     )
     narrative = NarrativeManagerAgent(
         knowledge_context=knowledge_loader.load_context(
             "narrative_manager",
             tasks=["record_commit"],
-        )
+        ),
+        llm_client=llm_client,
     )
 
     resource_cards = process_raw_items(raw_items, sorter)
