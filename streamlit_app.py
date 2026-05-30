@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from presenters.briefing_presenter import build_briefing_overview
+from presenters.timeline_presenter import build_narrative_timeline
 from presenters.data_presenter import build_debug_payload, build_news_detail_view, build_news_list_items
 from presenters.ingestion_presenter import build_ingestion_qa_overview
 from presenters.operations_presenter import build_operations_overview
@@ -48,6 +49,7 @@ def main() -> None:
     db_path = Path(os.environ.get("MACRO_AGENTS_DB_PATH", DEFAULT_DB_PATH))
     repository = SQLiteNewsRepository(db_path)
     briefing = build_briefing_overview(STORAGE_ROOT)
+    timeline = build_narrative_timeline(STORAGE_ROOT)
     research = build_research_overview(STORAGE_ROOT)
     operations = build_operations_overview(repository, STORAGE_ROOT)
     ingestion_qa = build_ingestion_qa_overview(DEFAULT_INGESTION_QA_REPORT)
@@ -58,12 +60,15 @@ def main() -> None:
     st.title("Macro Agents Research Workbench")
     st.caption("页面只负责展示；底层状态会先翻译成 view models，再交给 UI 渲染。")
 
-    briefing_tab, research_tab, operations_tab, ingestion_tab, data_tab = st.tabs(
-        ["今日叙事", "Research", "Operations", "Ingestion QA", "Data"]
+    briefing_tab, timeline_tab, research_tab, operations_tab, ingestion_tab, data_tab = st.tabs(
+        ["今日叙事", "演变", "Research", "Operations", "Ingestion QA", "Data"]
     )
 
     with briefing_tab:
         _render_briefing_view(st, briefing)
+
+    with timeline_tab:
+        _render_timeline_view(st, timeline)
 
     with research_tab:
         _render_research_view(st, research)
@@ -139,6 +144,46 @@ def _render_briefing_view(st: Any, b: Any) -> None:
                 st.progress(min(max(branch.challenge_probability, 0.0), 1.0))
                 if branch.key_triggers:
                     st.caption("关键触发点：" + " · ".join(branch.key_triggers))
+
+
+def _render_timeline_view(st: Any, t: Any) -> None:
+    st.subheader("演变时间线 · Narrative Evolution")
+    st.caption("主线强度/置信随时间怎么走，每一步是哪条更新推动的。")
+
+    if not t.available:
+        st.info("还没有可展示的演变历史。多跑几轮 run_harness 后，commit 历史会在这里累积成曲线。")
+        st.code("python run_harness.py", language="bash")
+        return
+
+    st.markdown(f"### {t.title}　共 {t.total_commits} 次更新")
+
+    if len(t.strength_series) >= 2:
+        st.line_chart(
+            {"强度 Strength": t.strength_series, "置信 Confidence": t.confidence_series},
+            height=260,
+        )
+    else:
+        st.caption("数据点不足（至少需要 2 次更新），继续处理新闻后显示曲线。")
+
+    st.divider()
+    st.markdown("### 关键节点（最近在前）")
+    badges = {"强化": "🟢 强化", "削弱": "🔴 削弱", "挑战": "⚠️ 挑战", "中性": "⚪ 中性"}
+    for point in t.points:
+        with st.container(border=True):
+            head = f"{badges.get(point.direction, point.direction)} · `{_format_datetime(point.when)}`"
+            if point.evidence_count:
+                head += f" · 证据 {point.evidence_count}"
+            st.markdown(head)
+            st.write(point.summary or "（无摘要）")
+            if point.strength_from is not None and point.strength_to is not None:
+                st.caption(
+                    f"强度 {round(point.strength_from * 100)}% → {round(point.strength_to * 100)}%"
+                    + (
+                        f"　置信 {round(point.confidence_from * 100)}% → {round(point.confidence_to * 100)}%"
+                        if point.confidence_from is not None and point.confidence_to is not None
+                        else ""
+                    )
+                )
 
 
 def _render_research_view(st: Any, overview: ResearchOverview) -> None:
