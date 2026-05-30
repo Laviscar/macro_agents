@@ -145,6 +145,33 @@ class SQLiteNewsRepository:
         ).fetchall()
         return [dict(row) for row in rows]
 
+    def list_news_by_status(self, status: str, limit: int = 20) -> list[dict]:
+        rows = self.connection.execute(
+            """
+            SELECT *
+            FROM news_items
+            WHERE analysis_status = ?
+            ORDER BY COALESCE(published_at, fetched_at) ASC, id ASC
+            LIMIT ?
+            """,
+            (status, limit),
+        ).fetchall()
+        return [dict(row) for row in rows]
+
+    def get_evidence_since(self, created_after: str) -> list[Evidence]:
+        rows = self.connection.execute(
+            "SELECT evidence_json FROM evidence_records WHERE created_at > ? ORDER BY created_at ASC",
+            (created_after,),
+        ).fetchall()
+        return [Evidence.model_validate_json(row["evidence_json"]) for row in rows]
+
+    def get_analysis_cards_since(self, created_after: str) -> list[AnalysisCard]:
+        rows = self.connection.execute(
+            "SELECT analysis_card_json FROM analysis_cards WHERE created_at > ? ORDER BY created_at ASC",
+            (created_after,),
+        ).fetchall()
+        return [AnalysisCard.model_validate_json(row["analysis_card_json"]) for row in rows]
+
     def get_news_item(self, news_item_id: int) -> dict | None:
         row = self.connection.execute(
             "SELECT * FROM news_items WHERE id = ?",
