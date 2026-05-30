@@ -20,10 +20,12 @@ def triage_pending(
     triage_agent: TriageAgent,
     sorter: NewsSorterAgent,
     limit: int = 20,
+    since: str | None = None,
+    newest_first: bool = False,
 ) -> dict:
     """pending_sort -> pending_analysis (important) | skipped (not important)."""
     important = skipped = errors = 0
-    for row in repository.list_news_by_status("pending_sort", limit=limit):
+    for row in repository.list_news_by_status("pending_sort", limit=limit, since=since, newest_first=newest_first):
         nid = int(row["id"])
         try:
             card = _load_or_build_resource_card(row, sorter)
@@ -41,11 +43,13 @@ def analyze_pending(
     repository: SQLiteNewsRepository,
     analyst: AnalystAgent,
     limit: int = 10,
+    since: str | None = None,
+    newest_first: bool = False,
 ) -> dict:
     """pending_analysis -> analyzed (+ analysis_cards / evidence_records)."""
     analyzed = errors = 0
     sorter = NewsSorterAgent()
-    for row in repository.list_news_by_status("pending_analysis", limit=limit):
+    for row in repository.list_news_by_status("pending_analysis", limit=limit, since=since, newest_first=newest_first):
         nid = int(row["id"])
         try:
             card = _load_or_build_resource_card(row, sorter)

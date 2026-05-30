@@ -84,15 +84,20 @@ def main() -> None:
     with system_tab:
         st.caption("系统运行视图：给开发/运维看，不是产品价值面。")
         if st.button("⚡ 立即跑全链路 (Run now)", type="primary"):
-            with st.spinner("抓取 → 筛选(便宜LLM) → 分析(推理LLM) → 整合叙事… 推理模型较慢,请稍候"):
-                from run_loop import build_run_loop
-                results = build_run_loop(db_path=str(db_path), storage_root=str(STORAGE_ROOT)).run_once()
-            st.success("全链路已跑完一轮。切到「今日叙事/叙事/分歧预警」查看更新(可能需刷新)。")
-            for r in results:
-                if r.get("ok"):
-                    st.write(f"✅ {r['stage']}: {r.get('result')}")
-                else:
-                    st.error(f"❌ {r['stage']}: {r.get('error')}")
+            from run_loop import build_run_loop
+            st.caption("只处理最近 15 分钟的新闻、最新优先(避免啃旧积压);逐阶段显示进度。")
+            loop = build_run_loop(db_path=str(db_path), storage_root=str(STORAGE_ROOT), run_now=True)
+            stage_labels = {"ingest": "① 抓取", "triage": "② 筛选 (flash)",
+                            "analysis": "③ 分析 (推理)", "consolidation": "④ 整合叙事 (推理)"}
+            for stage in loop.stages:
+                label = stage_labels.get(stage.name, stage.name)
+                with st.status(f"{label} 运行中…", expanded=False) as status:
+                    try:
+                        result = stage.run_fn()
+                        status.update(label=f"✅ {label}: {result}", state="complete")
+                    except Exception as exc:
+                        status.update(label=f"❌ {label}: {exc}", state="error")
+            st.success("全链路跑完一轮。切到「今日叙事/叙事/分歧预警」查看更新(可能需刷新)。")
         health_tab, qa_tab = st.tabs(["运行健康", "抓取自检 (fixture)"])
         with health_tab:
             _render_operations_view(st, operations)

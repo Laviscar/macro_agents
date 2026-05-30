@@ -77,7 +77,14 @@ def build_run_loop(
     db_path: str | Path = "storage/macro_agents.sqlite3",
     storage_root: str | Path = "storage",
     config_path: str | Path = "config/sources.yaml",
+    run_now: bool = False,
 ) -> "RunLoop":
+    """Assemble the staged loop. With run_now=True (the manual 'Run Now' button), triage
+    and analysis only touch news from the last RUN_NOW_WINDOW_MINUTES, newest-first, with
+    small batch caps — so a manual run reacts to fresh news instead of grinding the backlog.
+    """
+    from datetime import datetime, timedelta, timezone
+
     from agents.analyst import AnalystAgent
     from agents.narrative_manager import NarrativeManagerAgent
     from agents.news_sorter import NewsSorterAgent
@@ -105,15 +112,23 @@ def build_run_loop(
     cfg_path = resolve_news_service_config_path(Path(config_path)).resolve()
     ingest_service = build_polling_service(load_news_service_config(cfg_path), repository)
 
-    triage_batch = int(_interval("RUN_LOOP_TRIAGE_BATCH", 20))
-    analysis_batch = int(_interval("RUN_LOOP_ANALYSIS_BATCH", 10))
+    if run_now:
+        window_min = _interval("RUN_NOW_WINDOW_MINUTES", 15)
+        since = (datetime.now(timezone.utc) - timedelta(minutes=window_min)).isoformat()
+        triage_batch = int(_interval("RUN_NOW_TRIAGE_BATCH", 10))
+        analysis_batch = int(_interval("RUN_NOW_ANALYSIS_BATCH", 3))
+        triage_kwargs = {"limit": triage_batch, "since": since, "newest_first": True}
+        analysis_kwargs = {"limit": analysis_batch, "since": since, "newest_first": True}
+    else:
+        triage_kwargs = {"limit": int(_interval("RUN_LOOP_TRIAGE_BATCH", 20))}
+        analysis_kwargs = {"limit": int(_interval("RUN_LOOP_ANALYSIS_BATCH", 10))}
 
     stages = [
         Stage("ingest", _interval("RUN_LOOP_INGEST_SECONDS", 300), ingest_service.run_once),
         Stage("triage", _interval("RUN_LOOP_TRIAGE_SECONDS", 900),
-              lambda: triage_pending(repository, triage_agent, sorter, limit=triage_batch)),
+              lambda: triage_pending(repository, triage_agent, sorter, **triage_kwargs)),
         Stage("analysis", _interval("RUN_LOOP_ANALYSIS_SECONDS", 900),
-              lambda: analyze_pending(repository, analyst, limit=analysis_batch)),
+              lambda: analyze_pending(repository, analyst, **analysis_kwargs)),
         Stage("consolidation", _interval("RUN_LOOP_CONSOLIDATION_SECONDS", 3600),
               lambda: consolidate(repository, narrative_manager, storage_root, run_state_path)),
     ]

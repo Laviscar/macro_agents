@@ -46,3 +46,26 @@ def test_get_evidence_and_cards_since(tmp_path):
     cards = repo.get_analysis_cards_since("2026-05-31T00:00:00Z")
     assert [c.id for c in cards] == ["ac_new"]
     assert repo.get_evidence_since("2020-01-01T00:00:00Z")  # both
+
+
+def _item_at(title, published_at):
+    return RawNewsItem(source_type="rss", source_name="s", external_id=title, url=f"https://x/{title}",
+                       title=title, summary="s", published_at=published_at, fetched_at=published_at, raw_payload={})
+
+
+def test_list_news_by_status_since_filter(tmp_path):
+    repo = _repo(tmp_path)
+    repo.insert_news_item(_item_at("old", "2026-05-30T10:00:00+00:00"))
+    repo.insert_news_item(_item_at("new", "2026-05-31T23:50:00+00:00"))
+    recent = repo.list_news_by_status("pending_sort", limit=10, since="2026-05-31T23:00:00+00:00")
+    assert [r["title"] for r in recent] == ["new"]
+
+
+def test_list_news_by_status_newest_first(tmp_path):
+    repo = _repo(tmp_path)
+    repo.insert_news_item(_item_at("old", "2026-05-30T10:00:00+00:00"))
+    repo.insert_news_item(_item_at("new", "2026-05-31T23:50:00+00:00"))
+    rows = repo.list_news_by_status("pending_sort", limit=10, newest_first=True)
+    assert [r["title"] for r in rows] == ["new", "old"]
+    rows_asc = repo.list_news_by_status("pending_sort", limit=10)
+    assert [r["title"] for r in rows_asc] == ["old", "new"]  # default unchanged

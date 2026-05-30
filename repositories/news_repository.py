@@ -145,16 +145,30 @@ class SQLiteNewsRepository:
         ).fetchall()
         return [dict(row) for row in rows]
 
-    def list_news_by_status(self, status: str, limit: int = 20) -> list[dict]:
+    def list_news_by_status(
+        self,
+        status: str,
+        limit: int = 20,
+        since: str | None = None,
+        newest_first: bool = False,
+    ) -> list[dict]:
+        """List news items by status.
+
+        `since` (ISO) keeps only items whose effective time COALESCE(published_at,
+        fetched_at) is >= since. `newest_first=True` returns most-recent first (used by
+        the manual Run-Now path so it processes fresh news, not the oldest backlog).
+        """
+        order = "DESC" if newest_first else "ASC"
+        where = "analysis_status = ?"
+        params: list = [status]
+        if since:
+            where += " AND COALESCE(published_at, fetched_at) >= ?"
+            params.append(since)
+        params.append(limit)
         rows = self.connection.execute(
-            """
-            SELECT *
-            FROM news_items
-            WHERE analysis_status = ?
-            ORDER BY COALESCE(published_at, fetched_at) ASC, id ASC
-            LIMIT ?
-            """,
-            (status, limit),
+            f"SELECT * FROM news_items WHERE {where} "
+            f"ORDER BY COALESCE(published_at, fetched_at) {order}, id {order} LIMIT ?",
+            params,
         ).fetchall()
         return [dict(row) for row in rows]
 
