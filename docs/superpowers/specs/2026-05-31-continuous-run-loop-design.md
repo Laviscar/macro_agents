@@ -37,10 +37,10 @@ whichever stages are due, in pipeline order, then sleeps. This mirrors the exist
 run_loop.py (resident)
   every tick (~30s): for each stage, if due → run(); update last_run
   stages (pipeline order):
-    1. ingest          interval ~180s   program
-    2. triage          interval ~300s   cheap LLM
-    3. analysis        interval ~600s   reasoning LLM
-    4. consolidation   interval 3600s   reasoning LLM
+    1. ingest          interval 300s    program        (5 min)
+    2. triage          interval 900s    cheap LLM       (15 min)
+    3. analysis        interval 900s    reasoning LLM   (15 min)
+    4. consolidation   interval 3600s   reasoning LLM   (60 min)
     5. daily           interval 86400s  program (+ existing eval)
 ```
 
@@ -86,8 +86,13 @@ New `TriageAgent` (uses the triage client). For each `pending_sort` item (batche
   theme tag). Bias the prompt toward **recall** for macro-critical themes (don't drop
   borderline items).
 - **Important → status `pending_analysis`**; **not important → status `skipped`**.
-- Fallback (no triage client / LLM error / bad JSON): mark `pending_analysis` (fail
-  open — let the reasoning layer decide rather than silently dropping news).
+- **Fallback ladder on triage-client failure** (error / bad JSON):
+  1. retry the importance judgment with the **analysis (reasoning) client**, and emit a
+     **WARNING** (the cheap tier is degraded — surfaced in logs and counted for the 系统
+     page) so the user knows they're temporarily paying reasoning-model rates for triage;
+  2. if the reasoning client also fails (or no client at all): **fail open** → mark
+     `pending_analysis` (never silently drop news).
+- `TriageAgent` therefore holds a primary (cheap) client and a fallback (reasoning) client.
 - Batched with a per-cycle cap; remaining items wait for the next triage tick.
 
 This **replaces the broken rule-based routing** (which scored real news at 0.5 and
@@ -143,10 +148,10 @@ natural home for future watermarks). Read/write via `utils.io`.
 ```
 # cadences (seconds)
 RUN_LOOP_TICK_SECONDS=30
-RUN_LOOP_INGEST_SECONDS=180
-RUN_LOOP_TRIAGE_SECONDS=300
-RUN_LOOP_ANALYSIS_SECONDS=600
-RUN_LOOP_CONSOLIDATION_SECONDS=3600
+RUN_LOOP_INGEST_SECONDS=300          # 5 min
+RUN_LOOP_TRIAGE_SECONDS=900          # 15 min
+RUN_LOOP_ANALYSIS_SECONDS=900        # 15 min
+RUN_LOOP_CONSOLIDATION_SECONDS=3600  # 60 min
 RUN_LOOP_DAILY_SECONDS=86400
 
 # batch caps (cost/backpressure)
@@ -176,14 +181,16 @@ LLM_ANALYSIS_PROVIDER / LLM_ANALYSIS_MODEL / LLM_ANALYSIS_BASE_URL / LLM_ANALYSI
 - Each stage runs inside try/except; a failing stage logs and does not crash the loop or
   other stages.
 - Per-item isolation in triage/analysis (`mark_error`), as today.
-- LLM failures fall back: triage fails open (→ pending_analysis); analysis/narrative fall
+- LLM failures fall back: triage degrades to the reasoning client (with a WARNING),
+  then fails open (→ pending_analysis) only if that also fails; analysis/narrative fall
   back to rule logic (existing behavior).
 - SIGINT/SIGTERM → graceful stop (reuse the existing signal-handling pattern).
 
 ## Testing
 
-- `TriageAgent`: FakeLLMClient → important/skip routing; fallback fail-open on error/bad
-  JSON; no-client path.
+- `TriageAgent`: FakeLLMClient → important/skip routing; on cheap-client failure, falls
+  back to the reasoning client (asserts the warning is emitted); fails open
+  (→ pending_analysis) only when both clients fail; no-client path.
 - Tiered config: `load_llm_config("triage"/"analysis")` reads tier vars, falls back to
   `LLM_*`.
 - Consolidation watermark: seed evidence with timestamps, assert only post-watermark
@@ -206,7 +213,7 @@ LLM_ANALYSIS_PROVIDER / LLM_ANALYSIS_MODEL / LLM_ANALYSIS_BASE_URL / LLM_ANALYSI
 
 | File | Action |
 |------|--------|
-| `agents/triage.py` | Create `TriageAgent` (cheap LLM importance judgment + fallback) |
+| `agents/triage.py` | Create `TriageAgent` (cheap primary + reasoning fallback client; importance judgment; warn-on-degrade; fail-open last resort) |
 | `llm/config.py` | Add tier-aware `load_llm_config(tier=None)` |
 | `repositories/news_repository.py` | Add `list_news_by_status`, `get_evidence_since`, `get_analysis_cards_since` |
 | `harness/coordinator.py` | Split routing→triage; analysis uses analysis client |
