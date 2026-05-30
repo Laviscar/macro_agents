@@ -113,7 +113,8 @@ def test_alert_challenged_claim_uses_seeded_thesis_not_placeholder():
     # Fresh narrative (core_claims=待定义) + high-conflict evidence → alert created.
     # With an LLM client, the thesis is seeded first, so challenged_claim is meaningful.
     thesis = "美国主线:软着陆叙事在地缘冲突下承压"
-    agent = NarrativeManagerAgent(llm_client=FakeLLMClient(responses=[thesis]))
+    identity_json = json.dumps({"title": "软着陆承压", "thesis": thesis})
+    agent = NarrativeManagerAgent(llm_client=FakeLLMClient(responses=[identity_json]))
     ev = _conflict_evidence("油价飙升重燃通胀,冲击宽松路径")
     # bump strength/confidence so challenge_probability clears the 0.65 alert threshold
     ev = ev.__class__(**{**ev.__dict__, "strength": 0.95, "confidence": 0.95})

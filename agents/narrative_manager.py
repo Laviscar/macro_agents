@@ -45,18 +45,11 @@ class NarrativeManagerAgent:
             return current_state
 
         main_narrative: MainNarrative = current_state["main_narrative"]
-        # Seed a real thesis on a still-placeholder narrative BEFORE building any commit/
-        # alert, so even a first-batch challenge alert references a meaningful claim
-        # (not "待定义"). Fires at most once (guarded on the placeholder); LLM with fallback.
-        if self._llm_client is not None and (
-            not main_narrative.core_claims or main_narrative.core_claims == ["待定义"]
-        ):
-            try:
-                thesis = self._read_line_with_llm(main_narrative, evidence_list)
-                main_narrative = main_narrative.model_copy(update={"core_claims": [thesis]})
-                current_state["main_narrative"] = main_narrative
-            except (LLMError, ValueError, KeyError, TypeError):
-                pass
+        # Give a still-placeholder narrative a real identity (title + thesis) BEFORE building
+        # any commit/alert, so even a first-batch alert/title is meaningful (not "默认主线"/
+        # "待定义"). Fires once; LLM when available, else falls back to the driving claim.
+        main_narrative = self._seed_identity(main_narrative, evidence_list)
+        current_state["main_narrative"] = main_narrative
         branches: list[BranchNarrative] = list(current_state["branches"])
         commits: list[NarrativeCommit] = list(current_state["commits"])
         alerts: list[ChallengeAlert] = list(current_state["alerts"])
@@ -370,6 +363,60 @@ class NarrativeManagerAgent:
         if not line:
             raise ValueError("empty read line")
         return line
+
+    def _seed_identity(
+        self,
+        main_narrative: MainNarrative,
+        evidence_list: list[Evidence],
+    ) -> MainNarrative:
+        needs_title = main_narrative.title == "默认主线"
+        needs_thesis = not main_narrative.core_claims or main_narrative.core_claims == ["待定义"]
+        if not needs_title and not needs_thesis:
+            return main_narrative
+
+        title = thesis = None
+        if self._llm_client is not None:
+            try:
+                title, thesis = self._seed_identity_with_llm(main_narrative, evidence_list)
+            except (LLMError, ValueError, KeyError, TypeError):
+                title = thesis = None
+
+        rep = self._representative_claim(evidence_list)
+        updates: dict = {}
+        if needs_title:
+            chosen = title or (rep[:16] + "…" if rep and len(rep) > 16 else rep)
+            if chosen:
+                updates["title"] = chosen
+        if needs_thesis:
+            chosen = thesis or rep
+            if chosen:
+                updates["core_claims"] = [chosen]
+        return main_narrative.model_copy(update=updates) if updates else main_narrative
+
+    def _seed_identity_with_llm(
+        self,
+        main_narrative: MainNarrative,
+        evidence_list: list[Evidence],
+    ) -> tuple[str, str]:
+        ev = "\n".join(f"- [{e.relation_type}] {e.claim}" for e in evidence_list[:8])
+        system = "You name an emerging macro narrative. Respond with STRICT JSON only, no prose."
+        user = (
+            "Given the incoming evidence, name the emerging mainline macro narrative.\n"
+            f"{ev or '(none)'}\n\n"
+            'Return JSON with keys: "title" (a short Chinese name, <=14 chars) and '
+            '"thesis" (one Chinese sentence stating the narrative\'s core claim).'
+        )
+        response = self._llm_client.complete(
+            [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
+            temperature=0.0,
+            max_tokens=4096,
+        )
+        data = json.loads(response.text)
+        title = str(data["title"]).strip()
+        thesis = str(data["thesis"]).strip()
+        if not title or not thesis:
+            raise ValueError("empty identity")
+        return title, thesis
 
     def _read_line_rule_based(self, main_narrative: MainNarrative) -> str:
         watch = main_narrative.watch_items[:2]
