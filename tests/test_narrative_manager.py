@@ -136,3 +136,45 @@ def test_narrative_manager_lowers_probability_of_creates_branch_path() -> None:
     assert state["branches"][0].branch_strength > 0.3
     assert state["branches"][0].challenge_probability > 0.5
     assert state["commits"][0].narrative_type == "branch"
+
+
+def test_commit_summary_uses_evidence_claim_not_template() -> None:
+    agent = NarrativeManagerAgent()
+    evidence = Evidence(
+        id="ev_claim",
+        source_analysis_id="ac_x",
+        source_card_ids=["rc_x"],
+        claim="美国燃料出口创纪录,强化能源主导叙事",
+        relation_type="supports",
+        target_main_narrative_id="main_default",
+        target_branch_id=None,
+        strength=0.8,
+        confidence=0.8,
+        why="出口数据",
+        counter_evidence=[],
+        created_at="2026-05-30T00:00:00Z",
+    )
+    state = agent.update([evidence], None, {})
+    summary = state["commits"][0].summary
+    assert "美国燃料出口创纪录,强化能源主导叙事" in summary  # real claim, not "因 supports evidence"
+    assert "强化主线" in summary
+
+
+def test_commit_summary_falls_back_to_template_when_claim_empty() -> None:
+    agent = NarrativeManagerAgent()
+    evidence = Evidence(
+        id="ev_blank",
+        source_analysis_id="ac_y",
+        source_card_ids=["rc_y"],
+        claim="",  # no claim text → template fallback
+        relation_type="supports",
+        target_main_narrative_id="main_default",
+        target_branch_id=None,
+        strength=0.6,
+        confidence=0.6,
+        why="x",
+        counter_evidence=[],
+        created_at="2026-05-30T00:00:00Z",
+    )
+    state = agent.update([evidence], None, {})
+    assert "因 supports evidence 被强化" in state["commits"][0].summary

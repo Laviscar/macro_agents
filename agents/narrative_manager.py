@@ -140,6 +140,7 @@ class NarrativeManagerAgent:
                 relation_summary["dominant_relation"],
                 updated_main,
                 new_branch,
+                evidence_list,
             ),
             field_changes=self._build_field_changes(
                 relation_summary["dominant_relation"],
@@ -463,7 +464,38 @@ class NarrativeManagerAgent:
             return {"narrative_type": "branch", "narrative_id": new_branch.id}
         return {"narrative_type": "main", "narrative_id": updated_main.id}
 
+    _COMMIT_DIRECTION_TAG = {
+        "supports": "强化主线",
+        "raises_probability_of": "提高主线概率",
+        "conflicts_with": "与主线冲突",
+        "lowers_probability_of": "下修主线概率",
+        "complicates": "增加脆弱点/观察项",
+    }
+
     def _build_commit_summary(
+        self,
+        dominant_relation: str,
+        updated_main: MainNarrative,
+        new_branch: BranchNarrative | None,
+        evidence_list: list[Evidence],
+    ) -> str:
+        """Prefer the (LLM-generated) representative evidence claim + a direction tag;
+        fall back to the rule template only when no claim text is available."""
+        claim = self._representative_claim(evidence_list)
+        if not claim:
+            return self._build_commit_summary_template(dominant_relation, updated_main, new_branch)
+        tag = self._COMMIT_DIRECTION_TAG.get(dominant_relation, "更新主线")
+        if new_branch is not None and dominant_relation in {"conflicts_with", "lowers_probability_of"}:
+            tag = "强化挑战分支"
+        return f"{claim}（{tag}）"
+
+    def _representative_claim(self, evidence_list: list[Evidence]) -> str:
+        if not evidence_list:
+            return ""
+        strongest = max(evidence_list, key=lambda evidence: evidence.strength)
+        return strongest.claim.strip()
+
+    def _build_commit_summary_template(
         self,
         dominant_relation: str,
         updated_main: MainNarrative,
