@@ -1,10 +1,31 @@
-# Macro Agents v1.1
+# Macro Agents
 
-一个围绕宏观研究流程构建的最小多 Agent MVP：
+一个围绕宏观研究流程构建的多 Agent 系统：把连续的宏观新闻输入逐步沉淀成可更新、可追溯的「叙事状态」。
 
-- `News Sorter Agent`
-- `Analyst Agent`
-- `Narrative Manager Agent`
+- `News Sorter Agent` / `Analyst Agent` / `Narrative Manager Agent`
+
+## 版本进展
+
+| 版本 | 能力 |
+|------|------|
+| **V1.1** | 三 Agent 规则链路，Evidence 驱动叙事更新，JSON 落盘，demo |
+| **V1.2** | SQLite + RSS/Finnhub 抓取 + DB consumer + Streamlit UI + Ingestion QA |
+| **V1.3** | **Harness**：Loop 状态机 / PolicyEngine 风险门控 / BudgetGuard 预算 / ToolRuntime / SessionStore（事件可回放）/ Compaction / Eval 回放（`harness/`，设计见 `docs/V1_3_HARNESS_ARCHITECTURE.md`） |
+| **V1.4** | **LLM 集成**：provider 无关 LLM 层（`llm/`，OpenAI 兼容 / Claude / MiniMax），AnalystAgent + NarrativeManager 改为 **LLM 优先 + 规则兜底**，token 预算计量 enforcement，`.env` 配置 |
+
+> **不配 API key 时，全系统自动退回 V1.3 规则版**，行为与纯规则一致。
+>
+> **跑通 / 测试 / 配 key / 排错的完整步骤见 [`docs/RUNNING_AND_TESTING.md`](docs/RUNNING_AND_TESTING.md)。**
+
+## 架构分层（V1.3+）
+
+```
+入口脚本  run_harness.py / demo_runner.py / run_live_ingest.py / streamlit_app.py
+控制平面  harness/coordinator.py  →  HarnessCoordinator
+执行平面  harness/loop.py（状态机）+ harness/runtime.py（工具）+ harness/policy.py + harness/budget.py
+智能层    agents/（规则）+ llm/（LLM 客户端，注入 agent，带兜底）
+数据平面  repositories/（SQLite）+ storage/（叙事状态 JSON）+ harness/session_store.py（会话/事件）
+```
 
 ## 项目目标
 
@@ -78,7 +99,7 @@
 
 ```bash
 cd /Users/luyi/Projets/Macro_analyst/macro_agents
-/Users/luyi/tools/miniconda3/envs/macro/bin/python demo_runner.py
+python demo_runner.py
 ```
 
 默认输入：
@@ -100,7 +121,7 @@ cd /Users/luyi/Projets/Macro_analyst/macro_agents
 
 ```bash
 cd /Users/luyi/Projets/Macro_analyst/macro_agents
-/Users/luyi/tools/miniconda3/envs/macro/bin/python -m pytest
+python -m pytest
 ```
 
 ## 常驻抓取服务
@@ -210,7 +231,7 @@ export FINNHUB_API_KEY=your_token_here
 
 ```bash
 cd /Users/luyi/Projets/Macro_analyst/macro_agents
-/Users/luyi/tools/miniconda3/envs/macro/bin/python run_live_ingest.py --config config/sources.yaml
+python run_live_ingest.py --config config/sources.yaml
 ```
 
 预期第一轮日志里会看到：
@@ -222,7 +243,7 @@ cd /Users/luyi/Projets/Macro_analyst/macro_agents
 
 ```bash
 cd /Users/luyi/Projets/Macro_analyst/macro_agents
-/Users/luyi/tools/miniconda3/envs/macro/bin/python -m pipelines.live_ingest --config config/sources.yaml
+python -m pipelines.live_ingest --config config/sources.yaml
 ```
 
 兼容说明：
@@ -256,14 +277,14 @@ cd /Users/luyi/Projets/Macro_analyst/macro_agents
 
 ```bash
 cd /Users/luyi/Projets/Macro_analyst/macro_agents
-/Users/luyi/tools/miniconda3/envs/macro/bin/python -m pipelines.ingestion_qa
+python -m pipelines.ingestion_qa
 ```
 
 或：
 
 ```bash
 cd /Users/luyi/Projets/Macro_analyst/macro_agents
-/Users/luyi/tools/miniconda3/envs/macro/bin/python run_ingestion_qa.py
+python run_ingestion_qa.py
 ```
 
 ### QA 会做什么
@@ -302,10 +323,17 @@ cd /Users/luyi/Projets/Macro_analyst/macro_agents
 
 ## 目录
 
-- `agents/`: 三个核心 agent
-- `schemas/`: 稳定数据边界
-- `pipelines/`: 最小处理链路
-- `storage/`: JSON 落盘目录
-- `knowledge/`: 最小知识层占位
-- `tests/`: 第一轮测试
-- `docs/`: 版本边界与交接说明
+- `agents/`: 三个核心 agent（规则逻辑，可注入 LLM）
+- `llm/`: provider 无关 LLM 层（接口 / 配置 / OpenAI 兼容 / Claude / 工厂 / 计量）
+- `harness/`: 运行时内核（Loop 状态机 / 工具运行时 / 策略 / 预算 / 会话 / 评估 / 压缩）
+- `pipelines/`: 处理链路（ingest / clean / analyze / evidence / narrative_update / live_ingest / db_consumer / QA）
+- `sources/`: 新闻源 adapter（RSS / Finnhub）+ 配置加载
+- `repositories/`: SQLite 数据访问
+- `schemas/`: 稳定数据边界（Pydantic）
+- `presenters/` + `view_models/`: Streamlit UI 的展示层与 DTO
+- `knowledge/`: 领域知识（master prompt / rubric / protocol）—— 当前供审计，尚未喂入 LLM 提示词
+- `utils/`: 时钟 / ID / 打分 / IO / .env 加载 / knowledge_loader
+- `config/`: 非敏感可编辑配置（`sources.yaml`）
+- `storage/`: 叙事状态 JSON + SQLite 落盘
+- `tests/`: 测试（190 用例）
+- `docs/`: 版本边界、架构设计、运行手册

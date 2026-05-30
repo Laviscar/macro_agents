@@ -1,5 +1,8 @@
 # V1.3 Harness Architecture（Macro Narrative AI）
 
+> **实施状态（2026-05-30）**：本文为设计文档。Phase 1-3 + Direction A（连续运行闭环）+ 加固已全部完成并落在 `harness/`；V1.4 在此之上加了 LLM 集成（`llm/`）。
+> 注意：第 9 节的 `cost_budget_usd` 尚未实现（`BudgetConfig` 目前只有 `time_budget_seconds` + `token_budget`）；运行/测试步骤见 `docs/RUNNING_AND_TESTING.md`。
+
 ## 1. 目标定位
 
 V1.3 的目标是把当前 `macro_agents` 从「能跑通链路」升级为「可持续运行、可控、可评估」的宏观叙事系统。

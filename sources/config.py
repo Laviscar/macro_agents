@@ -91,9 +91,6 @@ def resolve_news_service_config_path(path: str | Path) -> Path:
 
     compatibility_map = {
         Path("configs/feeds.yaml"): Path("config/sources.yaml"),
-        Path("configs/app.yaml"): Path("config/app.yaml"),
-        Path("configs/routes.yaml"): Path("config/routes.yaml"),
-        Path("configs/scoring_rules.yaml"): Path("config/scoring_rules.yaml"),
     }
     for legacy_suffix, new_suffix in compatibility_map.items():
         if requested_path.parts[-len(legacy_suffix.parts) :] != legacy_suffix.parts:

@@ -8,7 +8,7 @@ from typing import Literal
 @dataclass
 class BudgetConfig:
     time_budget_seconds: float = 300.0
-    token_budget: int = 0  # 0 = no token limit (Phase 1: rule-based agents use 0 tokens)
+    token_budget: int = 0  # 0 = no token limit; >0 enforced once real LLM tokens are metered in
 
 
 @dataclass(frozen=True)

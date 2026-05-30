@@ -1,7 +1,0 @@
-routes:
-  send_to_analysis:
-    description: high signal
-  watchlist:
-    description: store and observe
-  archive_only:
-    description: archive without analysis

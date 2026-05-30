@@ -2,6 +2,11 @@
 
 `config/` is the single place for non-sensitive, human-editable settings.
 
+`sources.yaml` is currently the only live config file in this directory (it is the
+only one the code loads). News-sorter thresholds live as defaults in
+`agents/news_sorter.py` (`analysis_threshold=0.7`, `watchlist_threshold=0.45`) and are
+not yet externalized to YAML.
+
 ## Change Here Often
 
 - `sources.yaml`
@@ -9,10 +14,6 @@
   - change polling frequency
   - update symbols, topics, limits, regions
   - maintain the `trusted_sources` catalog used as the trusted-source whitelist
-- `scoring_rules.yaml`
-  - adjust news sorter thresholds
-- `routes.yaml`
-  - adjust route descriptions or future route metadata
 
 ## Change Here Sometimes
 
@@ -20,8 +21,6 @@
   - default database path
   - default poll interval
   - retry and backoff settings
-- `app.yaml`
-  - app-level defaults and metadata
 
 ## Do Not Put Secrets Here
 

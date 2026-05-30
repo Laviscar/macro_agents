@@ -1,20 +1,13 @@
 from __future__ import annotations
 
 import json
-import urllib.request
-from typing import Callable
 
+from llm._transport import TransportFn, urllib_transport
 from llm.base import LLMError, LLMMessage, LLMResponse
 from llm.config import LLMConfig
 
-# transport(url, headers, body_bytes, timeout) -> parsed json dict
-TransportFn = Callable[[str, dict, bytes, float], dict]
-
-
-def _urllib_transport(url: str, headers: dict, body: bytes, timeout: float) -> dict:
-    req = urllib.request.Request(url, data=body, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310
-        return json.loads(resp.read().decode("utf-8"))
+# Re-exported for backward compatibility (callers import TransportFn from here).
+__all__ = ["OpenAICompatibleClient", "TransportFn"]
 
 
 class OpenAICompatibleClient:
@@ -22,7 +15,7 @@ class OpenAICompatibleClient:
 
     def __init__(self, config: LLMConfig, transport: TransportFn | None = None) -> None:
         self._config = config
-        self._transport = transport or _urllib_transport
+        self._transport = transport or urllib_transport
 
     def complete(
         self,
