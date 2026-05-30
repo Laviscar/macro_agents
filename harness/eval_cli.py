@@ -10,7 +10,11 @@ from harness.session_store import HarnessSessionStore
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="Run eval harness over a time window")
-    parser.add_argument("--db", default="storage/harness.db", help="Path to harness SQLite DB")
+    parser.add_argument(
+        "--db",
+        default="storage/macro_agents.sqlite3",
+        help="Path to the SQLite DB holding harness sessions (same DB run_harness writes to)",
+    )
     parser.add_argument("--window-days", type=int, default=7, help="Number of days to look back")
     parser.add_argument("--format", choices=["json", "text"], default="text", help="Output format")
     return parser

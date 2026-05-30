@@ -8,7 +8,7 @@ def test_build_parser_defaults():
     parser = build_parser()
     args = parser.parse_args([])
     assert args.window_days == 7
-    assert args.db == "storage/harness.db"
+    assert args.db == "storage/macro_agents.sqlite3"
     assert args.format == "text"
 
 
