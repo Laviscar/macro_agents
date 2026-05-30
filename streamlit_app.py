@@ -60,27 +60,29 @@ def main() -> None:
     st.title("Macro Agents Research Workbench")
     st.caption("页面只负责展示；底层状态会先翻译成 view models，再交给 UI 渲染。")
 
-    briefing_tab, timeline_tab, research_tab, operations_tab, ingestion_tab, data_tab = st.tabs(
-        ["今日叙事", "演变", "Research", "Operations", "Ingestion QA", "Data"]
+    briefing_tab, narrative_tab, workbench_tab, system_tab = st.tabs(
+        ["今日叙事", "叙事", "新闻工作台", "系统"]
     )
 
     with briefing_tab:
         _render_briefing_view(st, briefing)
 
-    with timeline_tab:
+    with narrative_tab:
+        # 叙事页 = 演变时间线 + 当前主线/分歧（后续再加 P4 溯源）
         _render_timeline_view(st, timeline)
-
-    with research_tab:
+        st.divider()
         _render_research_view(st, research)
 
-    with operations_tab:
-        _render_operations_view(st, operations)
-
-    with ingestion_tab:
-        _render_ingestion_qa_view(st, ingestion_qa)
-
-    with data_tab:
+    with workbench_tab:
         _render_data_view(st, repository, news_items, data_rows)
+
+    with system_tab:
+        st.caption("系统运行视图：给开发/运维看，不是产品价值面。")
+        health_tab, qa_tab = st.tabs(["运行健康", "抓取自检 (fixture)"])
+        with health_tab:
+            _render_operations_view(st, operations)
+        with qa_tab:
+            _render_ingestion_qa_view(st, ingestion_qa)
 
 
 def _render_briefing_view(st: Any, b: Any) -> None:
@@ -274,8 +276,8 @@ def _render_data_view(
     news_items: list[NewsListItem],
     rows: list[dict],
 ) -> None:
-    st.subheader("Data")
-    st.caption("仓库视图只负责新闻、analysis、evidence 明细和调试入口。")
+    st.subheader("新闻工作台 · Workbench")
+    st.caption("逐条看新闻原文 + 它的 analysis / evidence 明细,以及调试入口。")
 
     if not news_items:
         st.info("当前 SQLite 中还没有新闻记录。")
@@ -316,7 +318,8 @@ def _render_data_view(
 
 def _render_ingestion_qa_view(st: Any, overview: IngestionQAOverview) -> None:
     st.subheader("Ingestion QA")
-    st.caption("这一页专门验证第一段链路：抓新闻、去重、清洗、入库。")
+    st.warning("⚠️ 本页是**固定 fixture 的管道自检**(造的假源/假数据),**不是实时 Finnhub 数据**。真实新闻见「新闻工作台」。")
+    st.caption("用刁难数据验证第一段链路：抓新闻、去重、清洗、容错、入库。")
 
     if not overview.report_available:
         st.info(overview.headline)
