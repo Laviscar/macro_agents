@@ -8,6 +8,7 @@ from harness.events import EventType, LoopEvent
 from harness.policy import PolicyDecision
 from harness.runtime import ToolResult, ToolRuntime
 from harness.session_store import HarnessSessionStore
+from llm.metering import TokenMeter
 from schemas.evidence import Evidence
 
 
@@ -58,10 +59,12 @@ class NarrativeLoopEngine:
         runtime: ToolRuntime,
         session_store: HarnessSessionStore,
         budget: BudgetGuard,
+        token_meter: "TokenMeter | None" = None,
     ) -> None:
         self.runtime = runtime
         self.session_store = session_store
         self.budget = budget
+        self._token_meter = token_meter
         self._events_count = 0
 
     def run(self, session_id: str, news_item_ids: list[int]) -> LoopResult:
@@ -210,6 +213,8 @@ class NarrativeLoopEngine:
                 raise RuntimeError(f"update_narrative failed: {result.error}")
 
         elif ctx.current_state == LoopState.CHECK_BUDGET_AND_STOP:
+            if self._token_meter is not None:
+                self.budget.add_tokens(self._token_meter.drain())
             status = self.budget.check()
             self._emit(ctx, EventType.BUDGET_CHECK, {
                 "ok": status.ok,

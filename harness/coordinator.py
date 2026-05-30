@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -14,6 +15,7 @@ from harness.runtime import BaseTool, ToolResult, ToolRuntime
 from harness.session_store import HarnessSessionStore
 from llm.config import load_llm_config
 from llm.factory import build_llm_client
+from llm.metering import MeteredLLMClient, TokenMeter
 from pipelines.narrative_update import update_from_evidence
 from repositories.news_repository import SQLiteNewsRepository
 from schemas.analysis_card import AnalysisCard
@@ -34,6 +36,7 @@ class TaskInput:
     news_item_ids: list[int]
     task_description: str = ""
     time_budget_seconds: float = 300.0
+    token_budget: int = 0
 
 
 def _load_or_build_resource_card(row: dict, sorter: NewsSorterAgent) -> ResourceCard:
@@ -186,18 +189,38 @@ class HarnessCoordinator:
         self.session_store = HarnessSessionStore(self.db_path)
         self.repository = SQLiteNewsRepository(self.db_path)
         self._sorter = NewsSorterAgent()
-        llm_client = build_llm_client(load_llm_config())
-        self._analyst = AnalystAgent(llm_client=llm_client)
-        self._narrative_manager = NarrativeManagerAgent()
+        base_client = build_llm_client(load_llm_config())
+        if base_client is not None:
+            self._token_meter: TokenMeter | None = TokenMeter()
+            client = MeteredLLMClient(base_client, self._token_meter)
+        else:
+            self._token_meter = None
+            client = None
+        self._analyst = AnalystAgent(llm_client=client)
+        self._narrative_manager = NarrativeManagerAgent(llm_client=client)
+        try:
+            self._default_token_budget = int(os.environ.get("LLM_TOKEN_BUDGET", "0") or 0)
+        except ValueError:
+            self._default_token_budget = 0
 
     def run_task(self, task_input: TaskInput) -> LoopResult:
         session_id = self.session_store.create_session(
             task_description=task_input.task_description,
             news_item_ids=task_input.news_item_ids,
         )
-        budget = BudgetGuard(BudgetConfig(time_budget_seconds=task_input.time_budget_seconds))
+        if self._token_meter is not None:
+            self._token_meter.reset()
+        budget = BudgetGuard(BudgetConfig(
+            time_budget_seconds=task_input.time_budget_seconds,
+            token_budget=task_input.token_budget,
+        ))
         runtime = self._build_runtime()
-        engine = NarrativeLoopEngine(runtime=runtime, session_store=self.session_store, budget=budget)
+        engine = NarrativeLoopEngine(
+            runtime=runtime,
+            session_store=self.session_store,
+            budget=budget,
+            token_meter=self._token_meter,
+        )
         return engine.run(session_id=session_id, news_item_ids=task_input.news_item_ids)
 
     def run_pending(self, limit: int = 20, time_budget_seconds: float = 300.0) -> LoopResult:
@@ -213,6 +236,7 @@ class HarnessCoordinator:
             news_item_ids=news_item_ids,
             task_description=f"Process {len(news_item_ids)} pending news items",
             time_budget_seconds=time_budget_seconds,
+            token_budget=self._default_token_budget,
         ))
 
     def _build_runtime(self) -> ToolRuntime:

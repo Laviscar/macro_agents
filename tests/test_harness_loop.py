@@ -308,3 +308,42 @@ def test_medium_tool_emits_policy_decision_event(store):
     decisions = {_json.loads(e["payload_json"])["decision"] for e in policy_events}
     assert "allow" in decisions
     assert len(policy_events) >= 2
+
+
+def test_loop_drains_token_meter_into_budget(store, passing_runtime):
+    from llm.metering import TokenMeter
+    meter = TokenMeter()
+    meter.add(150)
+    budget = BudgetGuard(BudgetConfig(time_budget_seconds=60.0, token_budget=0))
+    engine = NarrativeLoopEngine(
+        runtime=passing_runtime, session_store=store, budget=budget, token_meter=meter
+    )
+    session_id = store.create_session()
+    engine.run(session_id=session_id, news_item_ids=[1])
+    events = store.list_events_for_session(session_id)
+    budget_checks = [e for e in events if e["event_type"] == "budget_check"]
+    assert _json.loads(budget_checks[0]["payload_json"])["tokens_used"] == 150
+
+
+def test_loop_stops_on_token_budget_exceeded(store, passing_runtime):
+    from llm.metering import TokenMeter
+    meter = TokenMeter()
+    meter.add(500)
+    budget = BudgetGuard(BudgetConfig(time_budget_seconds=60.0, token_budget=100))
+    engine = NarrativeLoopEngine(
+        runtime=passing_runtime, session_store=store, budget=budget, token_meter=meter
+    )
+    session_id = store.create_session()
+    result = engine.run(session_id=session_id, news_item_ids=[1])
+    assert result.stop_reason == "token_exceeded"
+
+
+def test_loop_without_meter_unchanged(store, passing_runtime):
+    budget = BudgetGuard(BudgetConfig(time_budget_seconds=60.0))
+    engine = NarrativeLoopEngine(runtime=passing_runtime, session_store=store, budget=budget)
+    session_id = store.create_session()
+    result = engine.run(session_id=session_id, news_item_ids=[1])
+    assert result.final_state == LoopState.DONE
+    events = store.list_events_for_session(session_id)
+    budget_checks = [e for e in events if e["event_type"] == "budget_check"]
+    assert _json.loads(budget_checks[0]["payload_json"])["tokens_used"] == 0
