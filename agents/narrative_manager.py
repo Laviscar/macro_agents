@@ -239,6 +239,11 @@ class NarrativeManagerAgent:
     ) -> str:
         if analysis_card and analysis_card.candidate_branch_title:
             return analysis_card.candidate_branch_title
+        # Fall back to the (LLM-generated) driving evidence claim instead of an opaque
+        # "Branch from rc_xxx" id. Reuses an existing claim — no extra LLM call.
+        claim = self._representative_claim(evidence_list)
+        if claim:
+            return claim if len(claim) <= 48 else claim[:48].rstrip() + "…"
         if analysis_card:
             return f"Branch from {analysis_card.event_id}"
         return f"Branch from {evidence_list[0].id}"

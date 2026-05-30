@@ -178,7 +178,13 @@ class UpdateNarrativeTool(BaseTool):
 
         # One read-line generation per batch (LLM with rule fallback) for the briefing page.
         read_line = self.narrative_manager.generate_read_line(state["main_narrative"], evidence_list)
-        state["main_narrative"] = state["main_narrative"].model_copy(update={"read_line": read_line})
+        updates: dict = {"read_line": read_line}
+        # Bootstrap the main thesis when it is still the placeholder, so the briefing,
+        # research view, and future challenge alerts have a real claim instead of "待定义".
+        current_main = state["main_narrative"]
+        if not current_main.core_claims or current_main.core_claims == ["待定义"]:
+            updates["core_claims"] = [read_line]
+        state["main_narrative"] = current_main.model_copy(update=updates)
 
         main_narrative = state["main_narrative"]
         ensure_dir(self.storage_root / "main_narrative_state")

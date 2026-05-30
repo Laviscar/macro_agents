@@ -85,3 +85,23 @@ def test_read_line_no_client_is_rule_based():
     agent = NarrativeManagerAgent()
     line = agent.generate_read_line(_main_narrative(), [])
     assert "美国反通胀/软着陆" in line
+
+
+def _conflict_evidence(claim: str) -> Evidence:
+    return Evidence(
+        id="ev_conf", source_analysis_id="ac_c", source_card_ids=["rc_c"],
+        claim=claim, relation_type="conflicts_with",
+        target_main_narrative_id="main_default", target_branch_id=None,
+        strength=0.8, confidence=0.8, why="x", counter_evidence=[],
+        created_at="2026-05-30T00:00:00Z",
+    )
+
+
+def test_branch_title_uses_evidence_claim_when_no_candidate():
+    # conflicts_with → branch created; no analysis_card → must NOT be "Branch from ..."
+    agent = NarrativeManagerAgent()
+    state = agent.update([_conflict_evidence("美国能源主导地位面临地缘反噬")], None, {})
+    assert len(state["branches"]) == 1
+    title = state["branches"][0].title
+    assert not title.startswith("Branch from")
+    assert "美国能源主导地位面临地缘反噬" in title

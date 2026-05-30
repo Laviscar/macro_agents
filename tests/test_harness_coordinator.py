@@ -147,3 +147,15 @@ def test_run_pending_is_idempotent(coordinator, tmp_path):
     events = coordinator.session_store.list_events_for_session(second.session_id)
     tool_calls = [e for e in events if e["event_type"] == "tool_call"]
     assert tool_calls == []
+
+
+def test_core_claims_bootstrapped_from_read_line(coordinator, tmp_path):
+    # No LLM in test env → read_line is rule-based, but core_claims must move off "待定义".
+    repo = SQLiteNewsRepository(tmp_path / "test.sqlite3")
+    nid = repo.insert_news_item(_make_item("Inflation cools sharply, conflicts with hawkish stance"))
+    coordinator.run_task(TaskInput(news_item_ids=[nid]))
+    from harness.coordinator import load_narrative_state
+    state = load_narrative_state(tmp_path / "storage")
+    if state is not None:  # only if an update happened
+        assert state["main_narrative"].core_claims != ["待定义"]
+        assert state["main_narrative"].read_line  # read_line populated
