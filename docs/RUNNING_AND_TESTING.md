@@ -88,9 +88,28 @@ FINNHUB_API_KEY=your_finnhub_api_key
 
 2. **MiniMax / 其它 OpenAI 兼容端点**：把 `LLM_PROVIDER=minimax`（或 `openai`）+ `LLM_BASE_URL=<端点>` + 对应 key 即可，不用改代码。
 
+3. **国内 API（如 DeepSeek）配 `NO_PROXY` 避免代理重置**。若 shell 里有 `http_proxy`（Clash 等），国内 API 被绕进境外代理会频繁 `connection reset`。在 `.env` 加:
+   ```bash
+   NO_PROXY=api.deepseek.com
+   no_proxy=api.deepseek.com
+   ```
+   让它直连。
+
+### 三层 LLM(triage / analysis / narrative,各自独立 key)
+便宜模型做筛选、推理模型做分析与叙事。每层独立配置,**不填则回退到上面的 `LLM_*`**:
+```bash
+# 便宜模型筛选(最省;新闻重要性判断)
+LLM_TRIAGE_MODEL=deepseek-chat            # 其余(provider/base_url/key)不填则回退 LLM_*
+# 推理模型分析新闻 / 管理叙事(可填同一个 key,也可不同)
+LLM_ANALYSIS_MODEL=deepseek-reasoner
+LLM_NARRATIVE_MODEL=deepseek-reasoner
+# 每层也都能独立给 key/端点:LLM_TRIAGE_API_KEY / LLM_ANALYSIS_API_KEY / LLM_NARRATIVE_API_KEY 等
+```
+> 注意:`.env` 里这些行**别留行首的 `#`**(那是注释,不生效);填了值要把 `# ` 删掉。
+
 ### `.env` 会被谁加载？
-入口脚本启动时会调用 `load_dotenv()` 自动读 `.env`：`run_harness.py` / `demo_runner.py` / `run_live_ingest.py` / `run_ingestion_qa.py` / `streamlit_app.py`。
-> 注意：直接 `pytest` 不加载 `.env`（测试本就不该依赖真实 key）。
+入口脚本启动时会调用 `load_dotenv()` 自动读 `.env`：`run_loop.py` / `run_harness.py` / `demo_runner.py` / `run_live_ingest.py` / `run_ingestion_qa.py` / `streamlit_app.py`。
+> 注意：直接 `pytest` 不加载 `.env`（测试本就不该依赖真实 key）；改了 `.env` 要重启正在跑的 Streamlit。
 
 ---
 
@@ -129,11 +148,32 @@ python -m harness.eval_cli --window-days 30 --format json  # JSON
 输出 5 个指标：narrative_stability / evidence_precision / challenge_hit_rate / latency_seconds / tokens_used。
 > 只有当你跑 `run_harness.py` 时用 `--db` 指定了别的库，这里才需要传同一个值。
 
-### 3.5 Streamlit 监控 UI
+### 3.5 Streamlit 工作台 UI
 ```bash
-streamlit run streamlit_app.py
+streamlit run streamlit_app.py        # http://localhost:8501
 ```
-看 DB 里的新闻仓库、叙事主线/分支、ingestion QA 等。
+4 个产品页面:
+- **今日叙事**:一句话读数 + 强度/置信 + 走势 + 最近变化 + Top2 分歧
+- **叙事**:演变时间线(强度/置信双线 + 关键节点)+ 当前主线
+- **分歧预警**:挑战分支(按概率)+ 预警 + 情景 A/B
+- **新闻工作台**:逐条新闻 + analysis/evidence 明细
+- **系统**(子页:运行健康 / 抓取自检)——含 **⚡立即跑全链路 (Run Now)** 按钮(见 §3.7)
+
+> ⚠️ 改了代码或 `.env` 后要**重启 Streamlit**才生效(没装 watchdog 不自动重载;`pip install watchdog` 可自动重载)。
+
+### 3.6 持续运行 run_loop(推荐的生产方式)
+单进程常驻,内部分层定时:抓取 → 便宜 LLM 筛选 → 推理 LLM 分析 → 60min 整合叙事。
+```bash
+python run_loop.py            # 常驻;ingest 5min / triage 15min / analysis 15min / consolidation 60min
+python run_loop.py --once     # 各阶段各跑一次后退出(手动/调试)
+```
+节奏与批量都可在 `.env` 配(`RUN_LOOP_*_SECONDS` / `RUN_LOOP_*_BATCH`)。Ctrl-C 优雅退出。
+
+> **⚠️ 别同时跑 `run_loop` 和 `run_harness`** —— 两条并行处理路径会重复消费 pending、重复扰动叙事。
+> 日常用 `run_loop`(或 Run Now 按钮);`run_harness` 留作一次性补处理。
+
+### 3.7 ⚡ Run Now 按钮(系统页)——突发新闻时手动跑一轮
+点「立即跑全链路」:**只处理最近 15 分钟、最新优先**的新闻(避免啃旧积压),小批量,**逐阶段实时显示进度**(① 抓取 ② 筛选 ③ 分析 ④ 整合)。适合你判断有 breaking news 时立刻看 LLM 分析 + 叙事更新。窗口可配 `RUN_NOW_WINDOW_MINUTES`(默认 15)。
 
 ---
 

@@ -11,7 +11,7 @@
 | **V1.1** | 三 Agent 规则链路，Evidence 驱动叙事更新，JSON 落盘，demo |
 | **V1.2** | SQLite + RSS/Finnhub 抓取 + DB consumer + Streamlit UI + Ingestion QA |
 | **V1.3** | **Harness**：Loop 状态机 / PolicyEngine 风险门控 / BudgetGuard 预算 / ToolRuntime / SessionStore（事件可回放）/ Compaction / Eval 回放（`harness/`，设计见 `docs/V1_3_HARNESS_ARCHITECTURE.md`） |
-| **V1.4** | **LLM 集成**：provider 无关 LLM 层（`llm/`，OpenAI 兼容 / Claude / MiniMax），AnalystAgent + NarrativeManager 改为 **LLM 优先 + 规则兜底**，token 预算计量 enforcement，`.env` 配置 |
+| **V1.4** | **LLM 集成 + 持续运行**：provider 无关 LLM 层（`llm/`，OpenAI 兼容 / Claude / MiniMax）；AnalystAgent + NarrativeManager 改为 **LLM 优先 + 规则兜底**；**三层独立配置的 LLM**（triage 便宜筛选 / analysis 分析 / narrative 叙事）；常驻 **`run_loop.py`**（抓取→筛选→分析→60min 整合）+ Streamlit「⚡立即跑全链路」按钮；token 预算 enforcement，`.env` 配置 |
 
 > **不配 API key 时，全系统自动退回 V1.3 规则版**，行为与纯规则一致。
 >
@@ -20,11 +20,12 @@
 ## 架构分层（V1.3+）
 
 ```
-入口脚本  run_harness.py / demo_runner.py / run_live_ingest.py / streamlit_app.py
+编排层    run_loop.py（常驻分层定时:ingest→triage→analysis→consolidation）/ pipelines/stages.py
+入口脚本  run_loop.py / run_harness.py / demo_runner.py / run_live_ingest.py / streamlit_app.py
 控制平面  harness/coordinator.py  →  HarnessCoordinator
 执行平面  harness/loop.py（状态机）+ harness/runtime.py（工具）+ harness/policy.py + harness/budget.py
-智能层    agents/（规则）+ llm/（LLM 客户端，注入 agent，带兜底）
-数据平面  repositories/（SQLite）+ storage/（叙事状态 JSON）+ harness/session_store.py（会话/事件）
+智能层    agents/（规则 + triage）+ llm/（三层 LLM 客户端,注入 agent,带兜底）
+数据平面  repositories/（SQLite）+ storage/（叙事状态 JSON + run_state.json）+ harness/session_store.py
 ```
 
 ## 项目目标
