@@ -83,11 +83,12 @@ def test_run_eval_multiple_calls_accumulate_runs(tmp_path):
 
 
 def test_run_eval_includes_session_created_today(tmp_path):
-    from datetime import date
     store = _make_store(tmp_path)
     _seed_completed_session(store)
-    today = date.today().isoformat()
+    # Derive the window day from the session's own UTC created_at (now_iso is UTC),
+    # not local date.today(), so the test is timezone-stable across the midnight boundary.
+    day = store.list_sessions()[0]["created_at"][:10]
     scheduler = EvalScheduler(store)
-    # window_end is today's DATE; the session's created_at is today's full timestamp.
-    report = scheduler.run_eval(window_start=today, window_end=today)
+    # window bounds are a date-only string; the session's created_at is a full timestamp.
+    report = scheduler.run_eval(window_start=day, window_end=day)
     assert report.session_count == 1
