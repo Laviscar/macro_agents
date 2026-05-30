@@ -45,6 +45,18 @@ class NarrativeManagerAgent:
             return current_state
 
         main_narrative: MainNarrative = current_state["main_narrative"]
+        # Seed a real thesis on a still-placeholder narrative BEFORE building any commit/
+        # alert, so even a first-batch challenge alert references a meaningful claim
+        # (not "待定义"). Fires at most once (guarded on the placeholder); LLM with fallback.
+        if self._llm_client is not None and (
+            not main_narrative.core_claims or main_narrative.core_claims == ["待定义"]
+        ):
+            try:
+                thesis = self._read_line_with_llm(main_narrative, evidence_list)
+                main_narrative = main_narrative.model_copy(update={"core_claims": [thesis]})
+                current_state["main_narrative"] = main_narrative
+            except (LLMError, ValueError, KeyError, TypeError):
+                pass
         branches: list[BranchNarrative] = list(current_state["branches"])
         commits: list[NarrativeCommit] = list(current_state["commits"])
         alerts: list[ChallengeAlert] = list(current_state["alerts"])

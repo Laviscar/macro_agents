@@ -24,8 +24,10 @@ def _supports_evidence() -> Evidence:
 
 
 def test_llm_can_force_open_branch_against_rule_default():
+    # Two LLM calls now happen on a placeholder narrative: (1) thesis seeding,
+    # (2) challenge judgment. Provide both responses in order.
     llm_json = json.dumps({"challenge_probability": 0.8, "open_branch": True, "reason": "hidden fragility"})
-    agent = NarrativeManagerAgent(llm_client=FakeLLMClient(responses=[llm_json]))
+    agent = NarrativeManagerAgent(llm_client=FakeLLMClient(responses=["主线:温和复苏", llm_json]))
     state = agent.update([_supports_evidence()], None, {})
     assert len(state["branches"]) == 1
     assert len(state["alerts"]) == 1
@@ -105,3 +107,17 @@ def test_branch_title_uses_evidence_claim_when_no_candidate():
     title = state["branches"][0].title
     assert not title.startswith("Branch from")
     assert "美国能源主导地位面临地缘反噬" in title
+
+
+def test_alert_challenged_claim_uses_seeded_thesis_not_placeholder():
+    # Fresh narrative (core_claims=待定义) + high-conflict evidence → alert created.
+    # With an LLM client, the thesis is seeded first, so challenged_claim is meaningful.
+    thesis = "美国主线:软着陆叙事在地缘冲突下承压"
+    agent = NarrativeManagerAgent(llm_client=FakeLLMClient(responses=[thesis]))
+    ev = _conflict_evidence("油价飙升重燃通胀,冲击宽松路径")
+    # bump strength/confidence so challenge_probability clears the 0.65 alert threshold
+    ev = ev.__class__(**{**ev.__dict__, "strength": 0.95, "confidence": 0.95})
+    state = agent.update([ev], None, {})
+    assert state["alerts"], "expected an alert at high challenge probability"
+    assert state["alerts"][0].challenged_claim == thesis
+    assert "待定义" not in state["alerts"][0].challenged_claim
