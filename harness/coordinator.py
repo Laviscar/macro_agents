@@ -12,6 +12,8 @@ from harness.loop import LoopResult, NarrativeLoopEngine
 from harness.policy import PolicyEngine, RiskLevel
 from harness.runtime import BaseTool, ToolResult, ToolRuntime
 from harness.session_store import HarnessSessionStore
+from llm.config import load_llm_config
+from llm.factory import build_llm_client
 from pipelines.narrative_update import update_from_evidence
 from repositories.news_repository import SQLiteNewsRepository
 from schemas.analysis_card import AnalysisCard
@@ -184,7 +186,8 @@ class HarnessCoordinator:
         self.session_store = HarnessSessionStore(self.db_path)
         self.repository = SQLiteNewsRepository(self.db_path)
         self._sorter = NewsSorterAgent()
-        self._analyst = AnalystAgent()
+        llm_client = build_llm_client(load_llm_config())
+        self._analyst = AnalystAgent(llm_client=llm_client)
         self._narrative_manager = NarrativeManagerAgent()
 
     def run_task(self, task_input: TaskInput) -> LoopResult:
