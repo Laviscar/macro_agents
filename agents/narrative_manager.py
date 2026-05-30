@@ -310,6 +310,57 @@ class NarrativeManagerAgent:
         challenge_probability = clamp_score(float(data["challenge_probability"]))
         return challenge_probability, open_branch
 
+    def generate_read_line(
+        self,
+        main_narrative: MainNarrative,
+        evidence_list: list[Evidence],
+    ) -> str:
+        """One-sentence 'current read' of the narrative for the briefing page.
+
+        LLM-generated when a client is present; falls back to a templated line.
+        """
+        if self._llm_client is not None:
+            try:
+                return self._read_line_with_llm(main_narrative, evidence_list)
+            except (LLMError, ValueError, KeyError, TypeError):
+                pass
+        return self._read_line_rule_based(main_narrative)
+
+    def _read_line_with_llm(
+        self,
+        main_narrative: MainNarrative,
+        evidence_list: list[Evidence],
+    ) -> str:
+        ev = "\n".join(f"- [{e.relation_type}] {e.claim}" for e in evidence_list[:8])
+        system = (
+            "You write a single-sentence macro 'narrative read' for a research dashboard. "
+            "Output ONE sentence in Chinese, no quotes, no prose around it."
+        )
+        user = (
+            f"Mainline narrative: {main_narrative.title}\n"
+            f"Strength={main_narrative.strength:.2f}, Confidence={main_narrative.confidence:.2f}\n"
+            f"Recent evidence:\n{ev or '(none)'}\n\n"
+            "Write ONE Chinese sentence: what the current read of this narrative is, "
+            "plus the main tension/risk to watch."
+        )
+        response = self._llm_client.complete(
+            [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
+            temperature=0.0,
+            max_tokens=4096,  # generous cap so reasoning models can finish
+        )
+        line = response.text.strip().strip('"').strip()
+        if not line:
+            raise ValueError("empty read line")
+        return line
+
+    def _read_line_rule_based(self, main_narrative: MainNarrative) -> str:
+        watch = main_narrative.watch_items[:2]
+        if watch:
+            return f"主线「{main_narrative.title}」延续中,需关注:{'、'.join(watch)}。"
+        if main_narrative.fragility:
+            return f"主线「{main_narrative.title}」延续,但存在脆弱点:{main_narrative.fragility[0]}。"
+        return f"主线「{main_narrative.title}」当前相对稳固。"
+
     def _summarize_relations(self, evidence_list: list[Evidence]) -> dict[str, Any]:
         avg_strength = clamp_score(
             sum(evidence.strength for evidence in evidence_list) / len(evidence_list)

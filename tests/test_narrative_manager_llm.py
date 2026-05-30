@@ -56,3 +56,32 @@ def test_no_client_is_pure_rule_path():
     agent = NarrativeManagerAgent()
     state = agent.update([_supports_evidence()], None, {})
     assert len(state["branches"]) == 0
+
+
+def _main_narrative():
+    from schemas.main_narrative import MainNarrative
+    return MainNarrative(
+        id="main_default", title="美国反通胀/软着陆", region="US", theme="inflation",
+        status="active", version=1, core_claims=["通胀回落"], supporting_evidence=[],
+        counter_evidence=[], strength=0.6, confidence=0.58, market_consensus=0.5,
+        market_priced=0.5, fragility=[], watch_items=["能源价格"], replaced_by=None,
+        effective_from="2026-05-30T00:00:00Z", updated_at="2026-05-30T00:00:00Z",
+    )
+
+
+def test_read_line_uses_llm_when_client_present():
+    agent = NarrativeManagerAgent(llm_client=FakeLLMClient(responses=["反通胀延续,但能源是最大变数。"]))
+    line = agent.generate_read_line(_main_narrative(), [_supports_evidence()])
+    assert line == "反通胀延续,但能源是最大变数。"
+
+
+def test_read_line_falls_back_to_template_on_error():
+    agent = NarrativeManagerAgent(llm_client=FakeLLMClient(error=LLMError("boom")))
+    line = agent.generate_read_line(_main_narrative(), [_supports_evidence()])
+    assert "美国反通胀/软着陆" in line and "能源价格" in line  # rule fallback uses watch_items
+
+
+def test_read_line_no_client_is_rule_based():
+    agent = NarrativeManagerAgent()
+    line = agent.generate_read_line(_main_narrative(), [])
+    assert "美国反通胀/软着陆" in line

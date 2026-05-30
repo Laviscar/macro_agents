@@ -176,6 +176,10 @@ class UpdateNarrativeTool(BaseTool):
             state=prior_state,
         )
 
+        # One read-line generation per batch (LLM with rule fallback) for the briefing page.
+        read_line = self.narrative_manager.generate_read_line(state["main_narrative"], evidence_list)
+        state["main_narrative"] = state["main_narrative"].model_copy(update={"read_line": read_line})
+
         main_narrative = state["main_narrative"]
         ensure_dir(self.storage_root / "main_narrative_state")
         write_model(

@@ -27,3 +27,6 @@ class MainNarrative(BaseModel):
     replaced_by: str | None
     effective_from: str
     updated_at: str
+    # One-sentence "current read" for the briefing page; LLM-generated at narrative
+    # update time, empty when not yet produced (rule-based / legacy state).
+    read_line: str = ""

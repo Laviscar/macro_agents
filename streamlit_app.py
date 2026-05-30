@@ -4,6 +4,7 @@ import os
 from pathlib import Path
 from typing import Any
 
+from presenters.briefing_presenter import build_briefing_overview
 from presenters.data_presenter import build_debug_payload, build_news_detail_view, build_news_list_items
 from presenters.ingestion_presenter import build_ingestion_qa_overview
 from presenters.operations_presenter import build_operations_overview
@@ -46,6 +47,7 @@ def main() -> None:
 
     db_path = Path(os.environ.get("MACRO_AGENTS_DB_PATH", DEFAULT_DB_PATH))
     repository = SQLiteNewsRepository(db_path)
+    briefing = build_briefing_overview(STORAGE_ROOT)
     research = build_research_overview(STORAGE_ROOT)
     operations = build_operations_overview(repository, STORAGE_ROOT)
     ingestion_qa = build_ingestion_qa_overview(DEFAULT_INGESTION_QA_REPORT)
@@ -56,7 +58,12 @@ def main() -> None:
     st.title("Macro Agents Research Workbench")
     st.caption("页面只负责展示；底层状态会先翻译成 view models，再交给 UI 渲染。")
 
-    research_tab, operations_tab, ingestion_tab, data_tab = st.tabs(["Research", "Operations", "Ingestion QA", "Data"])
+    briefing_tab, research_tab, operations_tab, ingestion_tab, data_tab = st.tabs(
+        ["今日叙事", "Research", "Operations", "Ingestion QA", "Data"]
+    )
+
+    with briefing_tab:
+        _render_briefing_view(st, briefing)
 
     with research_tab:
         _render_research_view(st, research)
@@ -69,6 +76,69 @@ def main() -> None:
 
     with data_tab:
         _render_data_view(st, repository, news_items, data_rows)
+
+
+def _render_briefing_view(st: Any, b: Any) -> None:
+    st.subheader("今日叙事 · Briefing")
+    st.caption("一屏看懂：当前叙事怎么读、在往哪走、什么在动摇它。")
+
+    if not b.available:
+        st.info("还没有叙事数据。先跑 run_harness 处理一些待办新闻，这一页就有内容了。")
+        st.code("python run_harness.py", language="bash")
+        return
+
+    # ① 当前叙事读数
+    st.markdown(f"### {b.title}　`{b.status}`")
+    if b.read_line:
+        st.info(b.read_line)
+    else:
+        st.caption("（本轮还没有生成一句话读数——配好 LLM key 后由 run_harness 生成）")
+
+    metric_col, conf_col, trend_col = st.columns([1, 1, 2])
+    metric_col.metric(
+        "强度 Strength",
+        f"{round(b.strength * 100)}%",
+        delta=f"{round(b.strength_delta * 100):+d} pts" if b.strength_delta is not None else None,
+    )
+    conf_col.metric(
+        "置信 Confidence",
+        f"{round(b.confidence * 100)}%",
+        delta=f"{round(b.confidence_delta * 100):+d} pts" if b.confidence_delta is not None else None,
+    )
+    with trend_col:
+        st.caption("强度走势")
+        if len(b.strength_series) >= 2:
+            st.line_chart(b.strength_series, height=140)
+        else:
+            st.caption("数据点不足，多处理几轮新闻后显示。")
+
+    st.divider()
+
+    # ② 最近发生了什么
+    st.markdown("### 最近发生了什么")
+    if not b.recent_changes:
+        st.caption("暂无更新记录。")
+    else:
+        badges = {"强化": "🟢 强化", "削弱": "🔴 削弱", "挑战": "⚠️ 挑战", "中性": "⚪ 中性"}
+        for change in b.recent_changes:
+            st.markdown(
+                f"- {badges.get(change.direction, change.direction)} · "
+                f"`{_format_datetime(change.when)}` · {change.summary}"
+            )
+
+    st.divider()
+
+    # ③ 最该警惕的分歧
+    st.markdown("### 最该警惕的分歧")
+    if not b.top_branches:
+        st.caption("当前没有成型挑战分支。")
+    else:
+        for branch in b.top_branches:
+            with st.container(border=True):
+                st.markdown(f"**{branch.title}**　挑战概率 {round(branch.challenge_probability * 100)}%")
+                st.progress(min(max(branch.challenge_probability, 0.0), 1.0))
+                if branch.key_triggers:
+                    st.caption("关键触发点：" + " · ".join(branch.key_triggers))
 
 
 def _render_research_view(st: Any, overview: ResearchOverview) -> None:
