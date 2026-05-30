@@ -53,6 +53,26 @@ def _load_or_build_resource_card(row: dict, sorter: NewsSorterAgent) -> Resource
     return sorter.process(payload)
 
 
+def _sorter_rules_from_env() -> dict:
+    """Optional NewsSorter thresholds from env (defaults preserve the built-in 0.7/0.45).
+
+    NEWS_ANALYSIS_THRESHOLD lowers/raises the bar for routing an item to LLM analysis;
+    NEWS_WATCHLIST_THRESHOLD controls the watchlist cutoff.
+    """
+    rules: dict = {}
+    for env_key, rule_key in (
+        ("NEWS_ANALYSIS_THRESHOLD", "analysis_threshold"),
+        ("NEWS_WATCHLIST_THRESHOLD", "watchlist_threshold"),
+    ):
+        raw = os.environ.get(env_key)
+        if raw:
+            try:
+                rules[rule_key] = float(raw)
+            except ValueError:
+                pass
+    return rules
+
+
 def load_narrative_state(storage_root: str | Path) -> dict | None:
     """Rebuild the narrative state dict from disk, or None if no main narrative exists yet."""
     root = Path(storage_root)
@@ -188,7 +208,7 @@ class HarnessCoordinator:
         self.storage_root = Path(storage_root)
         self.session_store = HarnessSessionStore(self.db_path)
         self.repository = SQLiteNewsRepository(self.db_path)
-        self._sorter = NewsSorterAgent()
+        self._sorter = NewsSorterAgent(scoring_rules=_sorter_rules_from_env())
         base_client = build_llm_client(load_llm_config())
         if base_client is not None:
             self._token_meter: TokenMeter | None = TokenMeter()
