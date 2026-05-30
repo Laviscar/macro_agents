@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from typing import Any
 
+from llm.base import LLMClient, LLMError, LLMMessage
 from schemas.analysis_card import AnalysisCard
 from schemas.branch_narrative import BranchNarrative
 from schemas.challenge_alert import ChallengeAlert
@@ -21,9 +23,14 @@ class NarrativeManagerAgent:
     AnalysisCard 只用于辅助命名、审计和补充上下文。
     """
 
-    def __init__(self, knowledge_context: dict | None = None) -> None:
+    def __init__(
+        self,
+        knowledge_context: dict | None = None,
+        llm_client: LLMClient | None = None,
+    ) -> None:
         self.knowledge_context = knowledge_context or {}
         self.last_knowledge_docs: dict[str, list[dict]] = {}
+        self._llm_client = llm_client
 
     def update(
         self,
@@ -50,6 +57,14 @@ class NarrativeManagerAgent:
         avg_confidence = relation_summary["avg_confidence"]
         challenge_probability = relation_summary["challenge_probability"]
         branch_mode = relation_summary["branch_mode"]
+
+        if self._llm_client is not None:
+            try:
+                challenge_probability, branch_mode = self._judge_challenge_with_llm(
+                    evidence_list, main_narrative
+                )
+            except (LLMError, ValueError, KeyError, TypeError):
+                pass  # fall back to rule-derived values
 
         updated_main = main_narrative.model_copy(
             update={
@@ -260,6 +275,40 @@ class NarrativeManagerAgent:
         docs = [*always_docs, *task_docs]
         self.last_knowledge_docs[task] = docs
         return docs
+
+    def _judge_challenge_with_llm(
+        self,
+        evidence_list: list[Evidence],
+        main_narrative: MainNarrative,
+    ) -> tuple[float, bool]:
+        system = (
+            "You are a macro narrative risk judge. Decide whether incoming evidence warrants "
+            "opening a CHALLENGE branch against the mainline narrative, and estimate the "
+            "challenge probability. Respond with STRICT JSON only, no prose."
+        )
+        ev_lines = "\n".join(
+            f"- [{e.relation_type}] {e.claim} (strength={e.strength:.2f}, confidence={e.confidence:.2f})"
+            for e in evidence_list
+        )
+        user = (
+            f"Mainline narrative: {main_narrative.title}\n"
+            f"Core claims: {', '.join(main_narrative.core_claims)}\n"
+            f"Current strength={main_narrative.strength:.2f}, confidence={main_narrative.confidence:.2f}\n\n"
+            f"New evidence:\n{ev_lines}\n\n"
+            "Return JSON with keys: challenge_probability (0..1 float), "
+            "open_branch (boolean), reason (string)."
+        )
+        response = self._llm_client.complete(
+            [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
+            temperature=0.0,
+            max_tokens=300,
+        )
+        data = json.loads(response.text)
+        open_branch = data["open_branch"]
+        if not isinstance(open_branch, bool):
+            raise ValueError("open_branch must be a boolean")
+        challenge_probability = clamp_score(float(data["challenge_probability"]))
+        return challenge_probability, open_branch
 
     def _summarize_relations(self, evidence_list: list[Evidence]) -> dict[str, Any]:
         avg_strength = clamp_score(
