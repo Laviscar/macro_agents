@@ -106,6 +106,9 @@ def run_demo(
 
 
 def main() -> None:
+    from utils.dotenv import load_dotenv
+
+    load_dotenv()  # populate os.environ from .env (shell exports still win)
     result = run_demo()
     state = result["state"]
 

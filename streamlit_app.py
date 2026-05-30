@@ -12,6 +12,9 @@ from repositories.news_repository import SQLiteNewsRepository
 from view_models.ingestion_qa import IngestionQAOverview
 from view_models.research_overview import ChallengeBranchCard, MainNarrativeCard, ResearchOverview
 from view_models.warehouse_detail import NewsDetailView, NewsListItem
+from utils.dotenv import load_dotenv
+
+load_dotenv()  # populate os.environ from .env on app startup (shell exports still win)
 
 
 APP_ROOT = Path(__file__).resolve().parent

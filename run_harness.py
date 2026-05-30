@@ -5,6 +5,7 @@ from pathlib import Path
 
 from harness.coordinator import HarnessCoordinator
 from repositories.news_repository import SQLiteNewsRepository
+from utils.dotenv import load_dotenv
 
 _DEFAULT_DB = "storage/macro_agents.sqlite3"
 _DEFAULT_STORAGE = "storage"
@@ -52,6 +53,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def main(argv: list[str] | None = None) -> None:
+    load_dotenv()  # populate os.environ from .env (shell exports still win)
     args = build_parser().parse_args(argv)
     summary = drain(
         db_path=args.db,
