@@ -39,3 +39,29 @@ def test_anthropic_defaults():
     cfg = load_llm_config(env={"LLM_PROVIDER": "anthropic", "ANTHROPIC_API_KEY": "k"})
     assert cfg.model == "claude-sonnet-4-6"
     assert cfg.base_url == "https://api.anthropic.com/v1"
+
+
+def test_tier_reads_tier_specific_vars():
+    cfg = load_llm_config(env={
+        "LLM_PROVIDER": "openai", "LLM_MODEL": "base-model",
+        "LLM_TRIAGE_MODEL": "cheap-model", "OPENAI_API_KEY": "k",
+    }, tier="triage")
+    assert cfg.model == "cheap-model"
+
+
+def test_tier_falls_back_to_bare_llm_vars():
+    cfg = load_llm_config(env={"LLM_MODEL": "base-model", "OPENAI_API_KEY": "k"}, tier="analysis")
+    assert cfg.model == "base-model"  # no LLM_ANALYSIS_MODEL → falls back
+
+
+def test_tier_specific_key_env():
+    cfg = load_llm_config(env={
+        "LLM_TRIAGE_API_KEY_ENV": "CHEAP_KEY", "CHEAP_KEY": "ck",
+        "OPENAI_API_KEY": "base",
+    }, tier="triage")
+    assert cfg.api_key == "ck"
+
+
+def test_no_tier_is_backwards_compatible():
+    cfg = load_llm_config(env={"LLM_MODEL": "m", "OPENAI_API_KEY": "k"})
+    assert cfg.model == "m" and cfg.api_key == "k"

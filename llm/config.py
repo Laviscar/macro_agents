@@ -33,23 +33,26 @@ class LLMConfig:
         return bool(self.api_key)
 
 
-def load_llm_config(env: dict | None = None) -> LLMConfig:
-    """Build LLMConfig from environment. No secrets are ever hard-coded.
-
-    Recognized env vars:
-      LLM_PROVIDER (openai|minimax|anthropic; default openai)
-      LLM_MODEL, LLM_BASE_URL, LLM_TIMEOUT_SECONDS (optional overrides)
-      LLM_API_KEY_ENV (name of the var holding the key; default per provider)
-      LLM_API_KEY (fallback key var)
+def load_llm_config(env: dict | None = None, tier: str | None = None) -> LLMConfig:
+    """Build LLMConfig from environment. With `tier` (e.g. "triage"/"analysis"),
+    `LLM_<TIER>_X` is read first, falling back to bare `LLM_X`. No secrets hard-coded.
     """
     env = env if env is not None else os.environ
-    provider = (env.get("LLM_PROVIDER") or "openai").lower()
-    model = env.get("LLM_MODEL") or _DEFAULT_MODEL.get(provider, "")
-    base_url = env.get("LLM_BASE_URL") or _DEFAULT_BASE_URL.get(provider, "")
-    key_env = env.get("LLM_API_KEY_ENV") or _DEFAULT_KEY_ENV.get(provider, "LLM_API_KEY")
-    api_key = env.get(key_env) or env.get("LLM_API_KEY")
+
+    def g(key: str) -> str | None:
+        if tier:
+            v = env.get(f"LLM_{tier.upper()}_{key}")
+            if v:
+                return v
+        return env.get(f"LLM_{key}")
+
+    provider = (g("PROVIDER") or "openai").lower()
+    model = g("MODEL") or _DEFAULT_MODEL.get(provider, "")
+    base_url = g("BASE_URL") or _DEFAULT_BASE_URL.get(provider, "")
+    key_env = g("API_KEY_ENV") or _DEFAULT_KEY_ENV.get(provider, "LLM_API_KEY")
+    api_key = env.get(key_env) or g("API_KEY")
     try:
-        timeout = float(env.get("LLM_TIMEOUT_SECONDS") or 30.0)
+        timeout = float(g("TIMEOUT_SECONDS") or 30.0)
     except ValueError:
         timeout = 30.0
     return LLMConfig(
