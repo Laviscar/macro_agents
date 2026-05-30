@@ -27,10 +27,12 @@ class NarrativeManagerAgent:
         self,
         knowledge_context: dict | None = None,
         llm_client: LLMClient | None = None,
+        audit_panel=None,
     ) -> None:
         self.knowledge_context = knowledge_context or {}
         self.last_knowledge_docs: dict[str, list[dict]] = {}
         self._llm_client = llm_client
+        self.audit_panel = audit_panel
 
     def update(
         self,
@@ -70,6 +72,20 @@ class NarrativeManagerAgent:
                 )
             except (LLMError, ValueError, KeyError, TypeError):
                 pass  # fall back to rule-derived values
+
+        if (
+            self._llm_client is not None
+            and self.audit_panel is not None
+            and self.audit_panel.seat_count > 0
+        ):
+            try:
+                judgment = {"challenge_probability": challenge_probability, "open_branch": branch_mode}
+                ctx = self._audit_context(main_narrative, evidence_list)
+                critiques = self.audit_panel.deliberate(judgment, ctx)
+                if critiques:
+                    challenge_probability, branch_mode = self._rejudge_with_critiques(judgment, critiques, ctx)
+            except (LLMError, ValueError, KeyError, TypeError):
+                pass  # audit failure must never block the narrative update
 
         updated_main = main_narrative.model_copy(
             update={
@@ -320,6 +336,36 @@ class NarrativeManagerAgent:
             raise ValueError("open_branch must be a boolean")
         challenge_probability = clamp_score(float(data["challenge_probability"]))
         return challenge_probability, open_branch
+
+    def _audit_context(self, main_narrative: MainNarrative, evidence_list: list[Evidence]) -> str:
+        thesis = main_narrative.core_claims[0] if main_narrative.core_claims else main_narrative.title
+        ev = "\n".join(f"- [{e.relation_type}] {e.claim} (strength={e.strength:.2f})" for e in evidence_list[:8])
+        return f"Mainline thesis: {thesis}\nNew evidence:\n{ev or '(none)'}"
+
+    def _rejudge_with_critiques(self, judgment: dict, critiques: list[str], context: str) -> tuple[float, bool]:
+        system = (
+            "You are a macro narrative manager. Auditors critiqued your judgment about whether "
+            "incoming evidence challenges the mainline. Reconsider and give your FINAL judgment. "
+            "Respond with STRICT JSON only, no prose."
+        )
+        crit_block = "\n".join(f"- {c}" for c in critiques)
+        user = (
+            f"Your initial judgment: challenge_probability={judgment['challenge_probability']}, "
+            f"open_branch={judgment['open_branch']}\n"
+            f"Context:\n{context}\n"
+            f"Auditor critiques:\n{crit_block}\n\n"
+            'Return JSON: {"challenge_probability": 0..1 float, "open_branch": boolean}.'
+        )
+        response = self._llm_client.complete(
+            [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
+            temperature=0.0,
+            max_tokens=4096,
+        )
+        data = json.loads(response.text)
+        open_branch = data["open_branch"]
+        if not isinstance(open_branch, bool):
+            raise ValueError("open_branch must be a boolean")
+        return clamp_score(float(data["challenge_probability"])), open_branch
 
     def generate_read_line(
         self,

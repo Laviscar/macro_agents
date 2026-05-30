@@ -122,3 +122,28 @@ def test_alert_challenged_claim_uses_seeded_thesis_not_placeholder():
     assert state["alerts"], "expected an alert at high challenge probability"
     assert state["alerts"][0].challenged_claim == thesis
     assert "待定义" not in state["alerts"][0].challenged_claim
+
+
+def test_audit_panel_rejudge_changes_outcome():
+    import json as _j
+    from agents.audit import AuditPanel
+    from schemas.main_narrative import MainNarrative
+    initial = _j.dumps({"challenge_probability": 0.2, "open_branch": False})
+    seat_resp = _j.dumps({"critique": "you understate the conflict", "suggested_probability": 0.8, "suggested_open_branch": True})
+    rejudge = _j.dumps({"challenge_probability": 0.8, "open_branch": True})
+    nm_client = FakeLLMClient(responses=[initial, rejudge])  # judge → rejudge
+    panel = AuditPanel(seat_clients=[FakeLLMClient(responses=[seat_resp])], rounds=1)
+    agent = NarrativeManagerAgent(llm_client=nm_client, audit_panel=panel)
+    main = MainNarrative(id="main_default", title="美主线", region="US", theme="t", status="active",
+        version=1, core_claims=["已立论"], supporting_evidence=[], counter_evidence=[], strength=0.6,
+        confidence=0.6, market_consensus=0.5, market_priced=0.5, fragility=[], watch_items=[],
+        replaced_by=None, effective_from="2026-05-31T00:00:00Z", updated_at="2026-05-31T00:00:00Z")
+    state = {"main_narrative": main, "branches": [], "commits": [], "alerts": [], "scenarios": []}
+    out = agent.update([_supports_evidence()], None, state)
+    assert len(out["branches"]) == 1  # rejudge forced open_branch True → branch created despite 'supports'
+
+
+def test_no_audit_panel_keeps_initial_judgment():
+    agent = NarrativeManagerAgent(llm_client=FakeLLMClient(responses=['{"challenge_probability":0.1,"open_branch":false}']))
+    state = agent.update([_supports_evidence()], None, {})
+    assert len(state["branches"]) == 0  # no panel, supports → no branch
