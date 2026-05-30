@@ -58,17 +58,27 @@ budgeting are preserved per stage. The existing `NarrativeLoopEngine`/`SortAndAn
 are refactored into these reusable stage operations; nothing about the schemas, agents,
 or storage layout changes.
 
-### Two LLM tiers
+### Three LLM tiers (each independently keyed)
 
-`llm/config.py` gains tier-aware loading:
+`llm/config.py` gains tier-aware loading: `load_llm_config(tier=...)` reads `LLM_<TIER>_*`,
+falling back to bare `LLM_*`; `load_llm_config()` (no tier) keeps current behavior.
 
-- `load_llm_config(tier="triage")` reads `LLM_TRIAGE_*`, falling back to bare `LLM_*`.
-- `load_llm_config(tier="analysis")` reads `LLM_ANALYSIS_*`, falling back to bare `LLM_*`.
-- `load_llm_config()` (no tier) keeps current behavior (back-compat).
+`run_loop` builds **three** clients, each with its own provider/model/base_url/**key**
+(the user may fill the same or different values per tier):
 
-`run_loop` builds two clients: a cheap **triage client** and a reasoning **analysis
-client**. The analysis client is injected into `AnalystAgent` + `NarrativeManagerAgent`
-(as today). The triage client is injected into the new `TriageAgent`.
+- `triage` → cheap importance screen (`TriageAgent`)
+- `analysis` → news analysis (`AnalystAgent`)
+- `narrative` → narrative management (`NarrativeManagerAgent`: challenge judgment, identity,
+  read-line)
+
+The `TriageAgent` fallback (when the cheap client fails) uses the `analysis` client.
+
+### Manual full-chain run (button)
+
+A "立即跑全链路 / Run now" button on the 系统 page calls `RunLoop.run_once()` (runs every
+stage once, ignoring intervals) so the user can, on spotting breaking news, immediately
+trigger ingest → triage → analysis → consolidation and watch the LLM update the narrative.
+Synchronous with a spinner; the urgency/auto fast-path remains future work.
 
 ---
 
