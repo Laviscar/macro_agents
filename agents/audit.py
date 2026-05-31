@@ -1,39 +1,73 @@
 from __future__ import annotations
 
 import json
+from typing import Callable
 
 from llm.base import LLMClient, LLMError, LLMMessage
 from utils.logger import get_logger
 
+# rejudge(judgment, critiques, context) -> revised judgment dict
+RejudgeFn = Callable[[dict, list[str], str], dict]
+
 
 class AuditPanel:
-    """0–3 auditor seats critique a judgment over R rounds. Round 1 is independent;
-    each later round shows every seat the previous round's critiques. Returns the
-    final round's critiques (pure debate — makes no decision). Failing seats are
-    skipped with a warning; if no critiques survive, returns []."""
+    """0–3 auditor seats critique a narrative-manager judgment, then the manager
+    re-judges. Two debate modes (configurable):
 
-    def __init__(self, seat_clients: list[LLMClient], rounds: int = 1, logger=None) -> None:
+    - "cross" (cross-validation): seats critique over R rounds, each later round seeing
+      the previous round's peer critiques; the manager re-judges ONCE at the end.
+    - "p2p" (point-to-point): seats never see each other; each of R rounds every seat
+      critiques the CURRENT judgment and the manager re-judges — an X-round dialogue with
+      the manager as the hub.
+
+    `run()` returns the final judgment dict. Failing seats are skipped with a warning;
+    if no critiques survive a round, the judgment is left unchanged.
+    """
+
+    def __init__(self, seat_clients: list[LLMClient], rounds: int = 1, mode: str = "cross", logger=None) -> None:
         self._seats = list(seat_clients)
         self._rounds = max(1, min(int(rounds), 3))
+        self._mode = mode if mode in ("cross", "p2p") else "cross"
         self._logger = logger or get_logger("macro_agents.audit")
 
     @property
     def seat_count(self) -> int:
         return len(self._seats)
 
-    def deliberate(self, judgment: dict, context: str) -> list[str]:
+    @property
+    def mode(self) -> str:
+        return self._mode
+
+    def run(self, judgment: dict, context: str, rejudge: RejudgeFn) -> dict:
+        """Orchestrate the debate and return the final judgment dict."""
         if not self._seats:
-            return []
+            return judgment
+
+        if self._mode == "p2p":
+            current = dict(judgment)
+            for _ in range(self._rounds):
+                critiques = self._critique_round(current, context, peers=None)
+                if not critiques:
+                    break
+                current = rejudge(current, critiques, context)  # manager revises every round
+            return current
+
+        # cross: seats refine among themselves over R rounds, manager concludes once
         prev: list[str] = []
         for round_no in range(1, self._rounds + 1):
-            current: list[str] = []
-            for index, client in enumerate(self._seats):
-                try:
-                    current.append(self._critique(client, judgment, context, prev if round_no > 1 else None))
-                except (LLMError, ValueError, KeyError, TypeError) as exc:
-                    self._logger.warning("audit seat %d failed in round %d: %s", index + 1, round_no, exc)
-            prev = current
-        return prev
+            prev = self._critique_round(judgment, context, peers=prev if round_no > 1 else None)
+        if not prev:
+            return judgment
+        return rejudge(judgment, prev, context)
+
+    def _critique_round(self, judgment: dict, context: str, peers: list[str] | None) -> list[str]:
+        critiques: list[str] = []
+        for index, client in enumerate(self._seats):
+            try:
+                critiques.append(self._critique(client, judgment, context, peers))
+            except (LLMError, ValueError, KeyError, TypeError) as exc:
+                self._logger.warning("audit seat %d failed: %s", index + 1, exc)
+        return critiques
 
     def _critique(self, client: LLMClient, judgment: dict, context: str, peers: list[str] | None) -> str:
         system = (

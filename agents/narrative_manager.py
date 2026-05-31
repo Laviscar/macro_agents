@@ -81,9 +81,9 @@ class NarrativeManagerAgent:
             try:
                 judgment = {"challenge_probability": challenge_probability, "open_branch": branch_mode}
                 ctx = self._audit_context(main_narrative, evidence_list)
-                critiques = self.audit_panel.deliberate(judgment, ctx)
-                if critiques:
-                    challenge_probability, branch_mode = self._rejudge_with_critiques(judgment, critiques, ctx)
+                final = self.audit_panel.run(judgment, ctx, self._rejudge_with_critiques)
+                challenge_probability = clamp_score(float(final["challenge_probability"]))
+                branch_mode = bool(final["open_branch"])
             except (LLMError, ValueError, KeyError, TypeError):
                 pass  # audit failure must never block the narrative update
 
@@ -342,7 +342,7 @@ class NarrativeManagerAgent:
         ev = "\n".join(f"- [{e.relation_type}] {e.claim} (strength={e.strength:.2f})" for e in evidence_list[:8])
         return f"Mainline thesis: {thesis}\nNew evidence:\n{ev or '(none)'}"
 
-    def _rejudge_with_critiques(self, judgment: dict, critiques: list[str], context: str) -> tuple[float, bool]:
+    def _rejudge_with_critiques(self, judgment: dict, critiques: list[str], context: str) -> dict:
         system = (
             "You are a macro narrative manager. Auditors critiqued your judgment about whether "
             "incoming evidence challenges the mainline. Reconsider and give your FINAL judgment. "
@@ -365,7 +365,7 @@ class NarrativeManagerAgent:
         open_branch = data["open_branch"]
         if not isinstance(open_branch, bool):
             raise ValueError("open_branch must be a boolean")
-        return clamp_score(float(data["challenge_probability"])), open_branch
+        return {"challenge_probability": clamp_score(float(data["challenge_probability"])), "open_branch": open_branch}
 
     def generate_read_line(
         self,

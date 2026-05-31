@@ -112,6 +112,7 @@ def build_run_loop(
 
     seats = max(0, min(int(_interval("NARRATIVE_AUDIT_SEATS", 0)), 3))
     rounds = int(_interval("NARRATIVE_AUDIT_ROUNDS", 1))
+    audit_mode = os.environ.get("NARRATIVE_AUDIT_MODE", "cross")
     audit_panel = None
     if seats > 0:
         from agents.audit import AuditPanel
@@ -121,7 +122,7 @@ def build_run_loop(
             if client is not None:
                 seat_clients.append(client)
         if seat_clients:
-            audit_panel = AuditPanel(seat_clients, rounds=rounds)
+            audit_panel = AuditPanel(seat_clients, rounds=rounds, mode=audit_mode)
 
     narrative_manager = NarrativeManagerAgent(llm_client=narrative_client, audit_panel=audit_panel)
 
