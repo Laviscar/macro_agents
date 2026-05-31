@@ -1,0 +1,12 @@
+# 候选宇宙 — 不进第一版 50,LLM 可提名晋升、用户确认后并入 narrative_assets.yaml。
+# v1 先放从 L2 移出的共线/边缘标的;细分品类(GPU/存储/光模块/设备/材料/农产品/航运/
+# 风格因子/欧日新兴宽基…)后续补。
+assets:
+  - ETH
+  - SOL
+  - "BTC.D"      # BTC Dominance
+  - EURUSD
+  - CSI1000      # 中证1000
+  - SX5E         # Euro Stoxx 50
+  - SILVER
+  - NATGAS

@@ -1,0 +1,60 @@
+# 种子传导图 (v1) — 人工起,符号(sign)结构归人管,weight 上线后由叙事管理员自动跑。
+# src: 因子(词表内)或资产 id；dst: 恒为资产 id；driver_label ∈ driver_vocabulary.factors
+edges:
+  # ---- 利率/实际利率主轴 ----
+  - {src: 政策利率,   dst: US2Y,    sign: 1,  driver_label: 政策利率,     init_weight: 0.5}
+  - {src: 通胀预期,   dst: US10Y,   sign: 1,  driver_label: 通胀预期,     init_weight: 0.4}
+  - {src: 增长预期,   dst: US10Y,   sign: 1,  driver_label: 增长预期,     init_weight: 0.4}
+  - {src: 财政赤字供给, dst: US10Y,  sign: 1,  driver_label: 财政赤字供给, init_weight: 0.3}
+  - {src: 实际利率,   dst: NDX,     sign: -1, driver_label: 实际利率,     init_weight: 0.4}
+  - {src: 实际利率,   dst: BTC,     sign: -1, driver_label: 实际利率,     init_weight: 0.3}
+  - {src: US10Y,      dst: NDX,     sign: -1, driver_label: 实际利率,     init_weight: 0.4}
+  - {src: US10Y,      dst: RUT,     sign: -1, driver_label: 实际利率,     init_weight: 0.4}
+  - {src: US10Y,      dst: STAR50,  sign: -1, driver_label: 实际利率,     init_weight: 0.3}
+  - {src: US10Y,      dst: HSTECH,  sign: -1, driver_label: 实际利率,     init_weight: 0.3}
+  - {src: US10Y,      dst: DXY,     sign: 1,  driver_label: 政策利率,     init_weight: 0.3}
+
+  # ---- 黄金完整入边 ----
+  - {src: 实际利率,   dst: GOLD,    sign: -1, driver_label: 实际利率,     init_weight: 0.6}
+  - {src: 央行购金,   dst: GOLD,    sign: 1,  driver_label: 央行购金,     init_weight: 0.25}
+  - {src: 避险地缘,   dst: GOLD,    sign: 1,  driver_label: 避险地缘,     init_weight: 0.15}
+  - {src: DXY,        dst: GOLD,    sign: -1, driver_label: 美元流动性,   init_weight: 0.1}
+
+  # ---- 美元 ----
+  - {src: 美元流动性, dst: DXY,     sign: -1, driver_label: 美元流动性,   init_weight: 0.4}
+  - {src: 避险地缘,   dst: DXY,     sign: 1,  driver_label: 避险地缘,     init_weight: 0.2}
+  - {src: DXY,        dst: COPPER,  sign: -1, driver_label: 美元流动性,   init_weight: 0.3}
+  - {src: DXY,        dst: MSCI_EM, sign: -1, driver_label: 美元流动性,   init_weight: 0.3}
+  - {src: DXY,        dst: USDCNH,  sign: 1,  driver_label: 美元流动性,   init_weight: 0.4}
+  - {src: USDCNH,     dst: CSI300,  sign: -1, driver_label: 中国增长政策, init_weight: 0.3}
+  - {src: USDCNH,     dst: HSTECH,  sign: -1, driver_label: 中国增长政策, init_weight: 0.3}
+
+  # ---- 风险偏好/波动率 ----
+  - {src: 风险偏好,   dst: SPX,     sign: 1,  driver_label: 风险偏好,     init_weight: 0.4}
+  - {src: 风险偏好,   dst: NDX,     sign: 1,  driver_label: 风险偏好,     init_weight: 0.4}
+  - {src: 风险偏好,   dst: RUT,     sign: 1,  driver_label: 风险偏好,     init_weight: 0.4}
+  - {src: 风险偏好,   dst: BTC,     sign: 1,  driver_label: 风险偏好,     init_weight: 0.4}
+  - {src: 风险偏好,   dst: USDJPY,  sign: 1,  driver_label: 风险偏好,     init_weight: 0.3}
+  - {src: 风险偏好,   dst: VIX,     sign: -1, driver_label: 风险偏好,     init_weight: 0.5}
+  - {src: 风险偏好,   dst: GOLD,    sign: -1, driver_label: 风险偏好,     init_weight: 0.1}
+  - {src: 信用风险,   dst: HY_Spread, sign: 1, driver_label: 信用风险,    init_weight: 0.5}
+  - {src: 避险地缘,   dst: VIX,     sign: 1,  driver_label: 避险地缘,     init_weight: 0.3}
+
+  # ---- 实体周期/商品 ----
+  - {src: 制造业周期, dst: COPPER,  sign: 1,  driver_label: 制造业周期,   init_weight: 0.4}
+  - {src: 中国增长政策, dst: COPPER, sign: 1, driver_label: 中国增长政策, init_weight: 0.3}
+  - {src: 中国增长政策, dst: CSI300, sign: 1, driver_label: 中国增长政策, init_weight: 0.4}
+  - {src: 中国增长政策, dst: HSTECH, sign: 1, driver_label: 中国增长政策, init_weight: 0.3}
+  - {src: 中国增长政策, dst: MSCI_EM, sign: 1, driver_label: 中国增长政策, init_weight: 0.3}
+  - {src: 能源供给,   dst: WTI,     sign: -1, driver_label: 能源供给,     init_weight: 0.4}
+  - {src: 避险地缘,   dst: WTI,     sign: 1,  driver_label: 避险地缘,     init_weight: 0.3}
+
+  # ---- AI 跨层 ----
+  - {src: AI资本开支, dst: NVDA,    sign: 1,  driver_label: AI资本开支,   init_weight: 0.5}
+  - {src: AI资本开支, dst: SMH,     sign: 1,  driver_label: AI资本开支,   init_weight: 0.5}
+  - {src: AI资本开支, dst: NDX,     sign: 1,  driver_label: AI资本开支,   init_weight: 0.3}
+  - {src: AI资本开支, dst: CEG,     sign: 1,  driver_label: AI资本开支,   init_weight: 0.4}
+  - {src: AI资本开支, dst: VST,     sign: 1,  driver_label: AI资本开支,   init_weight: 0.4}
+  - {src: AI资本开支, dst: COPPER,  sign: 1,  driver_label: AI资本开支,   init_weight: 0.2}
+  - {src: NDX,        dst: NVDA,    sign: 1,  driver_label: 风险偏好,     init_weight: 0.3}
+  - {src: WTI,        dst: XLE,     sign: 1,  driver_label: 能源供给,     init_weight: 0.4}

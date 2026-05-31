@@ -1,0 +1,54 @@
+# 第一版预测池 = 41 资产节点。
+# layer: anchor(第一层,常驻) | asset_class(第二层,常驻) | theme(第三层,事件驱动)
+# resident: true=常驻主干(永不休眠) | false=事件驱动(21天无证据休眠)
+assets:
+  # ---- 第一层 · 宏观锚 (8, resident) ----
+  - {id: US2Y,      name: "US 2Y",        layer: anchor, resident: true,  ticker: US2Y}
+  - {id: US10Y,     name: "US 10Y",       layer: anchor, resident: true,  ticker: US10Y}
+  - {id: 2Y10Y,     name: "2s10s 利差",    layer: anchor, resident: true,  ticker: 2Y10Y}
+  - {id: HY_Spread, name: "高收益利差",     layer: anchor, resident: true,  ticker: HYSPREAD}
+  - {id: DXY,       name: "美元指数",       layer: anchor, resident: true,  ticker: DXY}
+  - {id: USDJPY,    name: "美元日元",       layer: anchor, resident: true,  ticker: USDJPY}
+  - {id: VIX,       name: "VIX",          layer: anchor, resident: true,  ticker: VIX}
+  - {id: MOVE,      name: "MOVE",         layer: anchor, resident: true,  ticker: MOVE}
+
+  # ---- 第二层 · 大类资产 (13, resident) ----
+  - {id: SPX,       name: "S&P 500",      layer: asset_class, resident: true, ticker: SPX}
+  - {id: NDX,       name: "Nasdaq 100",   layer: asset_class, resident: true, ticker: NDX}
+  - {id: RUT,       name: "Russell 2000", layer: asset_class, resident: true, ticker: RUT}
+  - {id: CSI300,    name: "沪深300",       layer: asset_class, resident: true, ticker: CSI300}
+  - {id: STAR50,    name: "科创50",        layer: asset_class, resident: true, ticker: STAR50}
+  - {id: HSTECH,    name: "恒生科技",       layer: asset_class, resident: true, ticker: HSTECH}
+  - {id: NKY,       name: "Nikkei 225",   layer: asset_class, resident: true, ticker: NKY}
+  - {id: MSCI_EM,   name: "MSCI EM",      layer: asset_class, resident: true, ticker: EEM}
+  - {id: USDCNH,    name: "美元离岸人民币", layer: asset_class, resident: true, ticker: USDCNH}
+  - {id: GOLD,      name: "黄金",          layer: asset_class, resident: true, ticker: XAUUSD}
+  - {id: COPPER,    name: "铜",            layer: asset_class, resident: true, ticker: HG}
+  - {id: WTI,       name: "WTI 原油",      layer: asset_class, resident: true, ticker: CL}
+  - {id: BTC,       name: "比特币",         layer: asset_class, resident: true, ticker: BTCUSD}
+
+  # ---- 第三层 · 主题资产 (20, 事件驱动) ----
+  # AI 算力链 (8)
+  - {id: NVDA,      name: "NVIDIA",        layer: theme, resident: false, ticker: NVDA}
+  - {id: SMH,       name: "半导体ETF",      layer: theme, resident: false, ticker: SMH}
+  - {id: MU,        name: "美光",          layer: theme, resident: false, ticker: MU}
+  - {id: ZJGC,      name: "中际旭创",       layer: theme, resident: false, ticker: "300308"}
+  - {id: FII,       name: "工业富联",       layer: theme, resident: false, ticker: "601138"}
+  - {id: VRT,       name: "Vertiv",        layer: theme, resident: false, ticker: VRT}
+  - {id: ETN,       name: "Eaton",         layer: theme, resident: false, ticker: ETN}
+  - {id: SMCI,      name: "Super Micro",   layer: theme, resident: false, ticker: SMCI}
+  # 电力/能源 (4)
+  - {id: CEG,       name: "Constellation", layer: theme, resident: false, ticker: CEG}
+  - {id: VST,       name: "Vistra",        layer: theme, resident: false, ticker: VST}
+  - {id: URA,       name: "铀ETF",         layer: theme, resident: false, ticker: URA}
+  - {id: XLE,       name: "能源ETF",        layer: theme, resident: false, ticker: XLE}
+  # 医药 (4)
+  - {id: XBI,       name: "Biotech ETF",   layer: theme, resident: false, ticker: XBI}
+  - {id: LLY,       name: "礼来",          layer: theme, resident: false, ticker: LLY}
+  - {id: WUXI,      name: "药明康德",       layer: theme, resident: false, ticker: "603259"}
+  - {id: HENGRUI,   name: "恒瑞医药",       layer: theme, resident: false, ticker: "600276"}
+  # 金融风险偏好 (4)
+  - {id: JPM,       name: "摩根大通",       layer: theme, resident: false, ticker: JPM}
+  - {id: KRE,       name: "区域银行ETF",    layer: theme, resident: false, ticker: KRE}
+  - {id: COIN,      name: "Coinbase",      layer: theme, resident: false, ticker: COIN}
+  - {id: EFC,       name: "东方财富",       layer: theme, resident: false, ticker: "300059"}
