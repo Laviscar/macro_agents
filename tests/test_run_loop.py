@@ -48,3 +48,21 @@ def test_run_once_returns_per_stage_results():
     results = loop.run_once()
     assert results[0] == {"stage": "a", "ok": True, "result": {"n": 1}}
     assert results[1]["stage"] == "b" and results[1]["ok"] is False and "boom" in results[1]["error"]
+
+
+def test_build_run_loop_audit_seats(monkeypatch):
+    import run_loop
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.setenv("NARRATIVE_AUDIT_SEATS", "2")
+    monkeypatch.setenv("NARRATIVE_AUDIT_ROUNDS", "2")
+    run_loop.build_run_loop()
+    nm = run_loop._last_narrative_manager
+    assert nm.audit_panel is not None and nm.audit_panel.seat_count == 2
+
+
+def test_build_run_loop_no_audit_by_default(monkeypatch):
+    import run_loop
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.delenv("NARRATIVE_AUDIT_SEATS", raising=False)
+    run_loop.build_run_loop()
+    assert run_loop._last_narrative_manager.audit_panel is None

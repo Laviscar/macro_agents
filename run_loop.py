@@ -11,6 +11,8 @@ from typing import Callable
 
 from utils.logger import get_logger, log_event
 
+_last_narrative_manager = None  # set by build_run_loop; used by tests/introspection
+
 
 @dataclass
 class Stage:
@@ -107,7 +109,21 @@ def build_run_loop(
     sorter = NewsSorterAgent()
     triage_agent = TriageAgent(primary_client=triage_client, fallback_client=analysis_client)
     analyst = AnalystAgent(llm_client=analysis_client)
-    narrative_manager = NarrativeManagerAgent(llm_client=narrative_client)
+
+    seats = max(0, min(int(_interval("NARRATIVE_AUDIT_SEATS", 0)), 3))
+    rounds = int(_interval("NARRATIVE_AUDIT_ROUNDS", 1))
+    audit_panel = None
+    if seats > 0:
+        from agents.audit import AuditPanel
+        seat_clients = []
+        for i in range(1, seats + 1):
+            client = build_llm_client(load_llm_config(tier=f"auditor_{i}"))
+            if client is not None:
+                seat_clients.append(client)
+        if seat_clients:
+            audit_panel = AuditPanel(seat_clients, rounds=rounds)
+
+    narrative_manager = NarrativeManagerAgent(llm_client=narrative_client, audit_panel=audit_panel)
 
     cfg_path = resolve_news_service_config_path(Path(config_path)).resolve()
     ingest_service = build_polling_service(load_news_service_config(cfg_path), repository)
@@ -132,6 +148,8 @@ def build_run_loop(
         Stage("consolidation", _interval("RUN_LOOP_CONSOLIDATION_SECONDS", 3600),
               lambda: consolidate(repository, narrative_manager, storage_root, run_state_path)),
     ]
+    global _last_narrative_manager
+    _last_narrative_manager = narrative_manager
     return RunLoop(stages)
 
 
