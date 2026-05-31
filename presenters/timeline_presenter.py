@@ -1,17 +1,32 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from view_models.timeline import NarrativeTimeline, TimelinePoint
 
 
-def build_narrative_timeline(storage_root: Path) -> NarrativeTimeline:
+def build_narrative_timeline(
+    storage_root: Path,
+    window_days: int | None = 30,
+    key_only: bool = True,
+) -> NarrativeTimeline:
+    """Build the evolution timeline.
+
+    `window_days` keeps only commits within the last N days (None = all). `key_only`
+    keeps only genuinely significant nodes in the change log (strength moved, or a
+    branch/challenge commit) — dropping 中性 no-change commits so it isn't an endless wall.
+    The strength/confidence chart series still use every windowed commit.
+    """
     mains = _load_json_documents(storage_root / "main_narrative_state")
     commits = sorted(
         _load_json_documents(storage_root / "narrative_commits"),
         key=lambda c: c.get("created_at", ""),
     )
+    if window_days is not None and commits:
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=window_days)).isoformat()
+        commits = [c for c in commits if c.get("created_at", "") >= cutoff]
 
     if not mains and not commits:
         return NarrativeTimeline(available=False, title="", total_commits=0)
@@ -70,10 +85,16 @@ def build_narrative_timeline(storage_root: Path) -> NarrativeTimeline:
 
     points.reverse()  # newest first for the change log
 
+    if key_only:
+        # A node is "key" when strength actually moved, or it's a branch/challenge commit.
+        # No-change 中性 main commits are noise in the change log.
+        points = [p for p in points if p.direction != "中性" or p.narrative_type == "branch"]
+
     return NarrativeTimeline(
         available=bool(commits),
         title=title,
         total_commits=len(commits),
+        key_count=len(points),
         points=points,
         series_labels=labels,
         strength_series=strength_series,

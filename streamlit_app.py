@@ -50,9 +50,8 @@ def main() -> None:
     db_path = Path(os.environ.get("MACRO_AGENTS_DB_PATH", DEFAULT_DB_PATH))
     repository = SQLiteNewsRepository(db_path)
     briefing = build_briefing_overview(STORAGE_ROOT)
-    timeline = build_narrative_timeline(STORAGE_ROOT)
     challenges = build_challenges_overview(STORAGE_ROOT)
-    research = build_research_overview(STORAGE_ROOT)
+    research = build_research_overview(STORAGE_ROOT, repository)
     operations = build_operations_overview(repository, STORAGE_ROOT)
     ingestion_qa = build_ingestion_qa_overview(DEFAULT_INGESTION_QA_REPORT)
     data_rows = repository.list_news_items(limit=50)
@@ -71,6 +70,13 @@ def main() -> None:
 
     with narrative_tab:
         # 叙事页 = 演变时间线 + 当前主线（挑战分支独立到「分歧预警」页；后续再加 P4 溯源）
+        window_opts = {"近 1 周": 7, "近 2 周": 14, "近 1 个月": 30, "近 3 个月": 90, "全部": None}
+        col_w, col_k = st.columns([2, 1])
+        window_label = col_w.selectbox("时间窗", list(window_opts.keys()), index=2)  # 默认近 1 个月
+        key_only = col_k.toggle("只看关键节点", value=True, help="只显示强度变化或挑战分支的节点，过滤无变化的中性提交")
+        timeline = build_narrative_timeline(
+            STORAGE_ROOT, window_days=window_opts[window_label], key_only=key_only
+        )
         _render_timeline_view(st, timeline)
         st.divider()
         _render_research_view(st, research)
@@ -177,7 +183,7 @@ def _render_timeline_view(st: Any, t: Any) -> None:
         st.code("python run_harness.py", language="bash")
         return
 
-    st.markdown(f"### {t.title}　共 {t.total_commits} 次更新")
+    st.markdown(f"### {t.title}　窗口内 {t.total_commits} 次更新 · 关键节点 {t.key_count} 个")
 
     if len(t.strength_series) >= 2:
         st.line_chart(
@@ -190,6 +196,8 @@ def _render_timeline_view(st: Any, t: Any) -> None:
     st.divider()
     st.markdown("### 关键节点（最近在前）")
     badges = {"强化": "🟢 强化", "削弱": "🔴 削弱", "挑战": "⚠️ 挑战", "中性": "⚪ 中性"}
+    if not t.points:
+        st.caption("当前窗口内没有关键节点（强度变化/挑战分支）。放宽时间窗或关闭「只看关键节点」可看全部更新。")
     for point in t.points:
         with st.container(border=True):
             head = f"{badges.get(point.direction, point.direction)} · `{_format_datetime(point.when)}`"
@@ -220,6 +228,8 @@ def _render_challenges_view(st: Any, c: Any) -> None:
 
     # 预警（高概率、已触发）
     st.markdown("### 🔔 预警")
+    if c.total_alerts > len(c.alerts):
+        st.caption(f"已按主张去重，显示概率最高的 {len(c.alerts)} 条（去重后共 {c.total_alerts} 条）。")
     if not c.alerts:
         st.caption("当前没有触发级预警（挑战概率达到阈值才触发）。")
     else:
@@ -230,8 +240,10 @@ def _render_challenges_view(st: Any, c: Any) -> None:
                 + (f"\n\n关键触发点：{' · '.join(alert.key_triggers)}" if alert.key_triggers else "")
             )
 
-    # 全部挑战分支（按概率排序）
+    # 挑战分支（按概率排序）
     st.markdown("### 挑战分支（按概率排序）")
+    if c.total_challenges > len(c.challenges):
+        st.caption(f"已按标题去重，显示概率最高的 {len(c.challenges)} 条（去重后共 {c.total_challenges} 条）。")
     for item in c.challenges:
         with st.container(border=True):
             st.markdown(f"**{item.title}**　`{item.status}`　挑战概率 {round(item.challenge_probability * 100)}%")
@@ -348,12 +360,18 @@ def _render_data_view(
     left, right = st.columns([1.05, 1.7], gap="large")
     with left:
         st.markdown("### News / Warehouse")
+        st.caption("按发布时间倒序排列（非入库序号）。状态：🟢已分析 · 🟡待处理 · ⚪已跳过 · 🔴出错")
+        status_badge = {
+            "analyzed": "🟢 已分析", "pending_sort": "🟡 待筛选", "pending_analysis": "🟡 待分析",
+            "skipped": "⚪ 已跳过", "error": "🔴 出错",
+        }
         for item in news_items:
             with st.container(border=True):
                 title_col, action_col = st.columns([5, 1])
                 with title_col:
                     st.markdown(f"**{item.title}**")
-                    st.caption(f"{item.source_name} | {_format_datetime(item.published_at)} | {item.analysis_status}")
+                    badge = status_badge.get(item.analysis_status, item.analysis_status)
+                    st.caption(f"{badge} · {item.source_name} · {_format_datetime(item.published_at)} · 入库#{item.news_item_id}")
                     st.write(item.summary)
                 with action_col:
                     if st.button(
@@ -549,7 +567,10 @@ def _render_list_section(st: Any, title: str, items: list[str], empty_message: s
 def _initialize_selection(st: Any, news_items: list[NewsListItem]) -> None:
     current_ids = [item.news_item_id for item in news_items]
     if "selected_news_id" not in st.session_state or st.session_state["selected_news_id"] not in current_ids:
-        st.session_state["selected_news_id"] = news_items[0].news_item_id
+        # Default to the first item that already has analysis, so the detail pane shows
+        # real analysis/evidence instead of "还没生成". Fall back to the newest item.
+        analyzed = next((i for i in news_items if i.analysis_status == "analyzed"), None)
+        st.session_state["selected_news_id"] = (analyzed or news_items[0]).news_item_id
 
 
 def _format_datetime(value: str | None) -> str:

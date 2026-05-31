@@ -20,7 +20,8 @@ class TimelinePoint:
 class NarrativeTimeline:
     available: bool
     title: str
-    total_commits: int
+    total_commits: int                                               # commits in window (all)
+    key_count: int = 0                                               # key nodes shown after filtering
     points: list[TimelinePoint] = field(default_factory=list)        # newest first (change log)
     series_labels: list[str] = field(default_factory=list)           # chronological x-axis (timestamps)
     strength_series: list[float] = field(default_factory=list)       # chronological, aligned to labels

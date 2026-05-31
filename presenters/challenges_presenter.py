@@ -5,6 +5,9 @@ from pathlib import Path
 
 from view_models.challenges import AlertItem, ChallengeItem, ChallengesOverview, ScenarioView
 
+_ALERT_CAP = 8       # 预警去重后最多显示条数
+_CHALLENGE_CAP = 10  # 挑战分支去重后最多显示条数
+
 
 def build_challenges_overview(storage_root: Path) -> ChallengesOverview:
     branches = _load_json_documents(storage_root / "branch_narrative_state")
@@ -17,6 +20,16 @@ def build_challenges_overview(storage_root: Path) -> ChallengesOverview:
     branch_title_by_id = {b.get("id"): b.get("title", "") for b in branches}
     scenario_by_branch = {s.get("branch_narrative_id"): s for s in scenarios}
 
+    # Dedupe alerts by (challenged_claim, branch) keeping the highest-probability instance —
+    # the old pipeline emitted one alert per consolidation tick on the same fixed claim, so
+    # the page filled with 20+ identical rows.
+    best_alert: dict[tuple, dict] = {}
+    for doc in alert_docs:
+        key = (doc.get("challenged_claim", ""), doc.get("branch_narrative_id"))
+        prob = float(doc.get("challenge_probability", 0.0))
+        if key not in best_alert or prob > float(best_alert[key].get("challenge_probability", 0.0)):
+            best_alert[key] = doc
+    total_alerts = len(best_alert)
     alerts = [
         AlertItem(
             challenged_claim=doc.get("challenged_claim", ""),
@@ -25,11 +38,24 @@ def build_challenges_overview(storage_root: Path) -> ChallengesOverview:
             key_triggers=list(doc.get("key_triggers", [])),
             created_at=doc.get("created_at", ""),
         )
-        for doc in sorted(alert_docs, key=lambda d: float(d.get("challenge_probability", 0.0)), reverse=True)
-    ]
+        for doc in sorted(best_alert.values(), key=lambda d: float(d.get("challenge_probability", 0.0)), reverse=True)
+    ][:_ALERT_CAP]
+
+    # Dedupe branches by title keeping the highest-probability one — many duplicate-title
+    # branches were opened and never merged.
+    best_branch: dict[str, dict] = {}
+    for branch in branches:
+        title = branch.get("title", "")
+        prob = float(branch.get("challenge_probability", 0.0))
+        if title not in best_branch or prob > float(best_branch[title].get("challenge_probability", 0.0)):
+            best_branch[title] = branch
+    total_challenges = len(best_branch)
 
     challenges = []
-    for branch in sorted(branches, key=lambda b: float(b.get("challenge_probability", 0.0)), reverse=True):
+    deduped_branches = sorted(
+        best_branch.values(), key=lambda b: float(b.get("challenge_probability", 0.0)), reverse=True
+    )[:_CHALLENGE_CAP]
+    for branch in deduped_branches:
         scenario_doc = scenario_by_branch.get(branch.get("id"))
         scenario = None
         if scenario_doc:
@@ -54,16 +80,23 @@ def build_challenges_overview(storage_root: Path) -> ChallengesOverview:
             )
         )
 
-    headline = _build_headline(challenges, alerts)
-    return ChallengesOverview(available=True, headline=headline, alerts=alerts, challenges=challenges)
+    headline = _build_headline(total_challenges, total_alerts, challenges)
+    return ChallengesOverview(
+        available=True,
+        headline=headline,
+        alerts=alerts,
+        challenges=challenges,
+        total_alerts=total_alerts,
+        total_challenges=total_challenges,
+    )
 
 
-def _build_headline(challenges: list[ChallengeItem], alerts: list[AlertItem]) -> str:
-    if not challenges and not alerts:
+def _build_headline(total_challenges: int, total_alerts: int, challenges: list[ChallengeItem]) -> str:
+    if not challenges and total_alerts == 0:
         return "当前没有挑战分支或预警。"
     top_prob = max((c.challenge_probability for c in challenges), default=0.0)
     return (
-        f"共 {len(challenges)} 条挑战分支，{len(alerts)} 条已触发预警，"
+        f"共 {total_challenges} 条挑战分支，{total_alerts} 条已触发预警，"
         f"最高挑战概率 {round(top_prob * 100)}%。"
     )
 

@@ -179,6 +179,17 @@ class SQLiteNewsRepository:
         ).fetchall()
         return [Evidence.model_validate_json(row["evidence_json"]) for row in rows]
 
+    def get_evidence_claims(self, evidence_ids: list[str]) -> dict[str, str]:
+        """Map evidence id -> claim text, for resolving narrative supporting/counter IDs to readable text."""
+        if not evidence_ids:
+            return {}
+        placeholders = ",".join("?" * len(evidence_ids))
+        rows = self.connection.execute(
+            f"SELECT id, evidence_json FROM evidence_records WHERE id IN ({placeholders})",
+            list(evidence_ids),
+        ).fetchall()
+        return {row["id"]: Evidence.model_validate_json(row["evidence_json"]).claim for row in rows}
+
     def get_analysis_cards_since(self, created_after: str) -> list[AnalysisCard]:
         rows = self.connection.execute(
             "SELECT analysis_card_json FROM analysis_cards WHERE created_at > ? ORDER BY created_at ASC",

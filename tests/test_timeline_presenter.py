@@ -54,3 +54,30 @@ def test_points_newest_first_with_direction_and_evidence_count(tmp_path):
     assert t.points[0].evidence_count == 2
     assert t.points[1].direction == "强化"             # 0.50 -> 0.58
     assert t.points[1].evidence_count == 1
+
+
+def test_window_days_excludes_old_commits(tmp_path):
+    _seed(tmp_path)
+    # add a stale commit ~1 year old; default 30d window must drop it
+    _write(tmp_path / "narrative_commits" / "c0_old.json", {
+        "id": "c0", "narrative_type": "main", "summary": "去年的旧提交",
+        "field_changes": {"strength": {"from": 0.40, "to": 0.50}},
+        "source_evidence_ids": [], "created_at": "2025-05-30T00:00:00Z",
+    })
+    assert build_narrative_timeline(tmp_path, window_days=30).total_commits == 2  # old one excluded
+    assert build_narrative_timeline(tmp_path, window_days=None).total_commits == 3  # all kept
+
+
+def test_key_only_filters_neutral_main_commits(tmp_path):
+    _seed(tmp_path)
+    # a no-change neutral main commit (strength unchanged) is noise
+    _write(tmp_path / "narrative_commits" / "c3_neutral.json", {
+        "id": "c3", "narrative_type": "main", "summary": "无变化的中性提交",
+        "field_changes": {}, "source_evidence_ids": [], "created_at": "2026-05-30T19:00:00Z",
+    })
+    key = build_narrative_timeline(tmp_path, key_only=True)
+    assert key.total_commits == 3                       # window count unchanged
+    assert key.key_count == 2                            # neutral dropped
+    assert all(p.summary != "无变化的中性提交" for p in key.points)
+    full = build_narrative_timeline(tmp_path, key_only=False)
+    assert full.key_count == 3 and len(full.points) == 3

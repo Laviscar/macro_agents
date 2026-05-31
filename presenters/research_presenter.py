@@ -6,7 +6,7 @@ from pathlib import Path
 from view_models.research_overview import ChallengeBranchCard, MainNarrativeCard, ResearchOverview
 
 
-def build_research_overview(storage_root: Path) -> ResearchOverview:
+def build_research_overview(storage_root: Path, repository=None) -> ResearchOverview:
     main_narratives = _load_json_documents(storage_root / "main_narrative_state")
     branch_narratives = _load_json_documents(storage_root / "branch_narrative_state")
     alerts = [item for item in _load_json_documents(storage_root / "alerts") if item.get("status") is None]
@@ -26,10 +26,10 @@ def build_research_overview(storage_root: Path) -> ResearchOverview:
                 summary=_build_main_summary(narrative),
                 strength=float(narrative["strength"]),
                 confidence=float(narrative["confidence"]),
-                reinforcing_factors=list(narrative.get("supporting_evidence", [])),
-                fragility_factors=list(narrative.get("fragility", [])),
+                reinforcing_factors=_recent_evidence_claims(narrative.get("supporting_evidence", []), repository),
+                fragility_factors=list(narrative.get("fragility", []))[-5:],
                 challenge_count=challenge_count,
-                watch_items=list(narrative.get("watch_items", [])),
+                watch_items=list(narrative.get("watch_items", []))[-5:],
                 updated_at=narrative["updated_at"],
             )
         )
@@ -62,6 +62,17 @@ def build_research_overview(storage_root: Path) -> ResearchOverview:
         global_summary=global_summary,
         updated_at=latest_updated_at,
     )
+
+
+def _recent_evidence_claims(evidence_ids: list, repository, limit: int = 5) -> list[str]:
+    """Resolve the most recent supporting-evidence IDs to readable claim text.
+    Falls back to the raw IDs when no repository is available (back-compat)."""
+    recent = list(evidence_ids)[-limit:]
+    if not recent or repository is None:
+        return recent
+    claims = repository.get_evidence_claims(recent)
+    # preserve recent order; drop IDs we couldn't resolve
+    return [claims[eid] for eid in recent if eid in claims]
 
 
 def _load_json_documents(directory: Path) -> list[dict]:

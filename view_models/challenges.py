@@ -37,5 +37,7 @@ class ChallengeItem:
 class ChallengesOverview:
     available: bool
     headline: str
-    alerts: list[AlertItem] = field(default_factory=list)
-    challenges: list[ChallengeItem] = field(default_factory=list)  # sorted by probability desc
+    alerts: list[AlertItem] = field(default_factory=list)           # deduped + capped, prob desc
+    challenges: list[ChallengeItem] = field(default_factory=list)   # deduped + capped, prob desc
+    total_alerts: int = 0                                           # before dedupe/cap
+    total_challenges: int = 0                                       # distinct branches before cap
