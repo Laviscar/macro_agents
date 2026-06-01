@@ -10,19 +10,31 @@ service:
 sources:
   - type: rss
     name: fed_rss
-    enabled: true
+    enabled: true               # 美联储新闻稿(需浏览器 UA,已在 rss_feed 里加)
     poll_interval_seconds: 300
     url: https://www.federalreserve.gov/feeds/press_all.xml
 
   - type: rss
+    name: ecb_blog
+    enabled: true               # ECB 博客(宏观/地缘风险),免 key 可用
+    poll_interval_seconds: 900
+    url: https://www.ecb.europa.eu/rss/blog.html
+
+  - type: rss
+    name: nyt_economy
+    enabled: true               # 纽约时报 经济版,免 key 可用
+    poll_interval_seconds: 600
+    url: https://rss.nytimes.com/services/xml/rss/nyt/Economy.xml
+
+  - type: rss
     name: bls_latest_rss
-    enabled: true
+    enabled: false              # BLS 持续 403(屏蔽程序化访问,即使带 UA),先关
     poll_interval_seconds: 900
     url: https://www.bls.gov/feed/bls_latest.rss
 
   - type: rss
     name: bis_press_rss
-    enabled: true
+    enabled: false              # BIS 是 RSS 1.0/RDF 格式,当前解析器只支持 RSS2.0/Atom,先关
     poll_interval_seconds: 900
     url: https://www.bis.org/doclist/all_pressrels.rss
 

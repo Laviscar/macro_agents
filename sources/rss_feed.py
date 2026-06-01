@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from typing import Callable
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from xml.etree import ElementTree as ET
 
 from dateutil.parser import parse as parse_datetime
@@ -125,6 +125,21 @@ class RssFeedAdapter:
             return tag
         return tag.rsplit("}", 1)[-1]
 
+    # Browser-like UA: gov/official feeds (fed, bls, ...) 403 the default Python urllib UA.
+    _USER_AGENT = (
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0 Safari/537.36 macro_agents-news-ingestor"
+    )
+
     def _default_fetcher(self, feed_url: str) -> str:
-        with urlopen(feed_url, timeout=15) as response:
-            return response.read().decode("utf-8")
+        request = Request(
+            feed_url,
+            headers={
+                "User-Agent": self._USER_AGENT,
+                "Accept": "application/rss+xml, application/atom+xml, application/xml, text/xml, */*",
+            },
+        )
+        with urlopen(request, timeout=15) as response:
+            raw = response.read()
+        # most feeds are utf-8; fall back leniently rather than crash on a stray byte
+        return raw.decode("utf-8", errors="replace")
