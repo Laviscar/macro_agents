@@ -58,3 +58,11 @@ def test_export_json_contract(tmp_path):
     doc = json.loads(out.read_text(encoding="utf-8"))
     assert "nodes" in doc and "edges" in doc
     assert any(n["id"] == "GOLD" for n in doc["nodes"])
+
+
+def test_graph_to_dot_renders(tmp_path):
+    from presenters.graph_presenter import graph_to_dot
+    repo = _repo(tmp_path)
+    dot = graph_to_dot(build_graph_view(repo, focus="GOLD"))
+    assert dot.startswith("digraph G {") and dot.rstrip().endswith("}")
+    assert '"GOLD"' in dot and '"实际利率" -> "GOLD"' in dot

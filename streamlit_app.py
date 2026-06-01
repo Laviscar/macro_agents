@@ -4,13 +4,12 @@ import os
 from pathlib import Path
 from typing import Any
 
-from presenters.briefing_presenter import build_briefing_overview
-from presenters.challenges_presenter import build_challenges_overview
-from presenters.timeline_presenter import build_narrative_timeline
 from presenters.data_presenter import build_debug_payload, build_news_detail_view, build_news_list_items
+from presenters.graph_presenter import build_graph_view, graph_to_dot, node_shift_history
 from presenters.ingestion_presenter import build_ingestion_qa_overview
 from presenters.operations_presenter import build_operations_overview
-from presenters.research_presenter import build_research_overview
+from presenters.today_presenter import build_shifts_view, build_today_view
+from repositories.graph_repository import GraphRepository
 from repositories.news_repository import SQLiteNewsRepository
 from view_models.ingestion_qa import IngestionQAOverview
 from view_models.research_overview import MainNarrativeCard, ResearchOverview
@@ -49,9 +48,9 @@ def main() -> None:
 
     db_path = Path(os.environ.get("MACRO_AGENTS_DB_PATH", DEFAULT_DB_PATH))
     repository = SQLiteNewsRepository(db_path)
-    briefing = build_briefing_overview(STORAGE_ROOT)
-    challenges = build_challenges_overview(STORAGE_ROOT)
-    research = build_research_overview(STORAGE_ROOT, repository)
+    graph_repo = GraphRepository(storage_root=STORAGE_ROOT, config_dir=str(APP_ROOT / "config"))
+    today = build_today_view(graph_repo)
+    shifts = build_shifts_view(graph_repo)
     operations = build_operations_overview(repository, STORAGE_ROOT)
     ingestion_qa = build_ingestion_qa_overview(DEFAULT_INGESTION_QA_REPORT)
     data_rows = repository.list_news_items(limit=50)
@@ -59,36 +58,28 @@ def main() -> None:
 
     st.set_page_config(page_title="Macro Agents Workbench", layout="wide")
     st.title("Macro Agents Research Workbench")
-    st.caption("页面只负责展示；底层状态会先翻译成 view models，再交给 UI 渲染。")
+    st.caption("叙事驱动图 (v1.6)：每个资产是一条由驱动因子组成的叙事;最强入边=主导驱动,变了=驱动切换。")
 
-    briefing_tab, narrative_tab, challenges_tab, workbench_tab, system_tab = st.tabs(
-        ["今日叙事", "叙事", "分歧预警", "新闻工作台", "系统"]
+    today_tab, tree_tab, shifts_tab, workbench_tab, system_tab = st.tabs(
+        ["今日叙事", "世界树", "分歧预警", "新闻工作台", "系统"]
     )
 
-    with briefing_tab:
-        _render_briefing_view(st, briefing)
+    with today_tab:
+        _render_today_view(st, today)
 
-    with narrative_tab:
-        # 叙事页 = 演变时间线 + 当前主线（挑战分支独立到「分歧预警」页；后续再加 P4 溯源）
-        window_opts = {"近 1 周": 7, "近 2 周": 14, "近 1 个月": 30, "近 3 个月": 90, "全部": None}
-        col_w, col_k = st.columns([2, 1])
-        window_label = col_w.selectbox("时间窗", list(window_opts.keys()), index=2)  # 默认近 1 个月
-        key_only = col_k.toggle("只看关键节点", value=True, help="只显示强度变化或挑战分支的节点，过滤无变化的中性提交")
-        timeline = build_narrative_timeline(
-            STORAGE_ROOT, window_days=window_opts[window_label], key_only=key_only
-        )
-        _render_timeline_view(st, timeline)
-        st.divider()
-        _render_research_view(st, research)
+    with tree_tab:
+        _render_world_tree(st, graph_repo)
 
-    with challenges_tab:
-        _render_challenges_view(st, challenges)
+    with shifts_tab:
+        _render_shifts_view(st, shifts)
 
     with workbench_tab:
         _render_data_view(st, repository, news_items, data_rows)
 
     with system_tab:
         st.caption("系统运行视图：给开发/运维看，不是产品价值面。")
+        _render_candidate_panel(st, graph_repo)
+        st.divider()
         if st.button("⚡ 立即跑全链路 (Run now)", type="primary"):
             from run_loop import build_run_loop
             st.caption("只处理最近 15 分钟的新闻、最新优先(避免啃旧积压);逐阶段显示进度。")
@@ -103,12 +94,110 @@ def main() -> None:
                         status.update(label=f"✅ {label}: {result}", state="complete")
                     except Exception as exc:
                         status.update(label=f"❌ {label}: {exc}", state="error")
-            st.success("全链路跑完一轮。切到「今日叙事/叙事/分歧预警」查看更新(可能需刷新)。")
+            st.success("全链路跑完一轮。切到「今日叙事/世界树/分歧预警」查看更新(可能需刷新)。")
         health_tab, qa_tab = st.tabs(["运行健康", "抓取自检 (fixture)"])
         with health_tab:
             _render_operations_view(st, operations)
         with qa_tab:
             _render_ingestion_qa_view(st, ingestion_qa)
+
+
+def _render_today_view(st: Any, t: Any) -> None:
+    st.subheader("今日叙事 · Top Narratives")
+    st.caption("从所有资产里排出最值得看的几条:正在驱动切换 > 逼近切换 > 证据多 > 方向性强。")
+    if not t.available:
+        st.info("世界树还没有数据。到「系统」页点「立即跑全链路」处理新闻后,这里就有内容了。")
+        return
+    st.caption(f"共 {t.total_assets} 条活跃资产叙事,展示最值得看的 {len(t.cards)} 条。")
+    for c in t.cards:
+        with st.container(border=True):
+            flags = ""
+            if c.is_shifting:
+                flags += "　🔀 驱动切换中"
+            if c.is_contested:
+                flags += "　⚠️ 逼近切换"
+            st.markdown(f"**{c.name}**　主导驱动：`{c.dominant_driver or '—'}`{flags}")
+            if c.read_line:
+                st.info(c.read_line)
+            cols = st.columns([1, 1, 2])
+            cols[0].metric("方向性强度", f"{round(c.strength * 100)}%")
+            cols[1].metric("置信", f"{round(c.confidence * 100)}%")
+            tag = f"regime: {c.tags_regime}" if c.tags_regime else "regime: —"
+            cols[2].caption(f"{tag}　·　证据 {c.evidence_count} 条")
+
+
+def _render_world_tree(st: Any, graph_repo: Any) -> None:
+    st.subheader("世界树 · Driver Graph")
+    st.caption("节点=资产/因子(按层分色),边=谁驱动谁(绿+红−,粗细=权重,加粗=主导驱动),红框=正在切换。")
+    layer_opts = {"全部": None, "宏观锚": "anchor", "大类资产": "asset_class", "主题": "theme", "因子": "factor"}
+    asset_ids = ["（不聚焦）"] + sorted(n.id for n in graph_repo.list_nodes() if n.kind == "asset")
+    c1, c2, c3 = st.columns([1, 1.4, 1])
+    layer_label = c1.selectbox("按层过滤", list(layer_opts.keys()), index=0)
+    focus_label = c2.selectbox("聚焦某资产(看它的入边)", asset_ids, index=0)
+    show_dormant = c3.toggle("显示休眠主题", value=False)
+    focus = None if focus_label == "（不聚焦）" else focus_label
+    view = build_graph_view(graph_repo, layer=layer_opts[layer_label], focus=focus, include_dormant=show_dormant)
+    if not view.nodes:
+        st.info("当前过滤条件下没有可显示的节点。")
+        return
+    st.graphviz_chart(graph_to_dot(view), use_container_width=True)
+
+    if focus:
+        node = graph_repo.get_node(focus)
+        if node is not None:
+            st.markdown(f"### {node.name}　`{node.id}`")
+            if node.read_line:
+                st.info(node.read_line)
+            st.write(f"主导驱动：**{node.dominant_driver or '—'}** · 方向性强度 {round(node.strength*100)}% · "
+                     f"regime {node.tags_regime or '—'} · 国家 {', '.join(node.tags_countries) or '—'}")
+            incoming = sorted(graph_repo.incoming_edges(focus), key=lambda e: e.weight, reverse=True)
+            st.markdown("**候选驱动(入边,按权重)**")
+            for e in incoming:
+                st.caption(f"{'🟢+' if e.sign > 0 else '🔴−'} {e.driver_label}　w={round(e.weight,2)}　← {e.src}　(证据 {len(e.supporting_evidence)})")
+            hist = node_shift_history(graph_repo, focus)
+            if hist:
+                st.markdown("**驱动切换史**")
+                for h in hist:
+                    st.caption(f"`{_format_datetime(h['at'])}`　{h['from_driver']} → {h['to_driver']}")
+
+
+def _render_shifts_view(st: Any, v: Any) -> None:
+    st.subheader("分歧预警 · Driver Shifts")
+    st.caption("哪些资产的主导逻辑切换了、或正在被另一驱动逼近 —— 共识何时可能裂开。")
+    if not v.available:
+        st.info("当前没有驱动切换或逼近切换。出现足够证据让某资产的次强驱动逼近主导时,这里会报警。")
+        return
+    st.markdown("### 🔀 已切换")
+    if not v.shifts:
+        st.caption("当前没有已确认的驱动切换。")
+    for s in v.shifts:
+        st.error(f"**{s.name}** 的主导逻辑从 `{s.from_driver}` 切到 `{s.to_driver}`　·　`{_format_datetime(s.at)}`")
+    st.markdown("### ⚠️ 逼近切换(竞争驱动)")
+    if not v.contested:
+        st.caption("当前没有逼近切换的资产。")
+    for c in v.contested:
+        st.warning(f"**{c.name}**：`{c.leader}` 领先,但 `{c.runner_up}` 正在逼近(差 {c.gap})。")
+
+
+def _render_candidate_panel(st: Any, graph_repo: Any) -> None:
+    candidates = graph_repo.list_candidates()
+    st.markdown(f"### 候选主干待确认（{len(candidates)}）")
+    st.caption("LLM 从新闻里提名的新驱动边。批准 → 进图并永久写入 config/approved_edges.yaml;拒绝 → 丢弃。")
+    if not candidates:
+        st.caption("当前没有待确认的候选边。")
+        return
+    for cand in candidates:
+        with st.container(border=True):
+            st.markdown(f"`{cand.src}` —({'+' if cand.sign > 0 else '−'})→ `{cand.dst}`　驱动：**{cand.driver_label}**")
+            a, b = st.columns(2)
+            if a.button("✅ 批准", key=f"approve-{cand.id}"):
+                promoted = graph_repo.promote_candidate(cand.id)
+                if promoted is not None:
+                    graph_repo.append_approved_edge(promoted)
+                st.rerun()
+            if b.button("❌ 拒绝", key=f"reject-{cand.id}"):
+                graph_repo.reject_candidate(cand.id)
+                st.rerun()
 
 
 def _render_briefing_view(st: Any, b: Any) -> None:

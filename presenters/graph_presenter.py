@@ -72,6 +72,35 @@ def build_graph_view(
     return GraphView(nodes=nodes, edges=edges)
 
 
+_LAYER_FILL = {
+    "anchor": "#ffd9d9",       # 宏观锚
+    "asset_class": "#d9e8ff",  # 大类
+    "theme": "#d9ffe0",        # 主题
+    "factor": "#eeeeee",       # 因子
+}
+
+
+def graph_to_dot(view) -> str:
+    """Render a GraphView as Graphviz DOT (consumed by st.graphviz_chart).
+
+    Nodes colored by layer; shifting assets get a red bold border; edge color =
+    sign (+green/-red), width ~ weight, dominant driver edges are bold.
+    """
+    lines = ["digraph G {", "rankdir=LR;", 'node [style=filled, shape=box, fontname="Helvetica"];']
+    for n in view.nodes:
+        fill = _LAYER_FILL.get(n.layer, "#ffffff")
+        label = n.name + (f"\\n[{n.dominant_driver}]" if n.dominant_driver else "")
+        extra = ', color="#d32f2f", penwidth=3' if n.is_shifting else ""
+        lines.append(f'"{n.id}" [label="{label}", fillcolor="{fill}"{extra}];')
+    for e in view.edges:
+        color = "#2e7d32" if e.sign > 0 else "#c62828"
+        pen = 1.0 + e.weight * 4.0
+        style = "bold" if e.is_dominant else "solid"
+        lines.append(f'"{e.src}" -> "{e.dst}" [label="{e.driver_label}", color="{color}", penwidth={pen:.1f}, style={style}];')
+    lines.append("}")
+    return "\n".join(lines)
+
+
 def node_shift_history(graph_repo, node_id: str) -> list[dict]:
     """Per-node driver-shift history (newest first) — the v1.6 '演变' for one asset."""
     rows = [s for s in graph_repo.list_driver_shifts() if s.get("node_id") == node_id]
