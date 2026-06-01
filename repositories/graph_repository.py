@@ -42,6 +42,11 @@ class GraphRepository:
         vocab = yaml.safe_load((self.config_dir / "driver_vocabulary.yaml").read_text(encoding="utf-8"))
         assets = yaml.safe_load((self.config_dir / "narrative_assets.yaml").read_text(encoding="utf-8"))["assets"]
         seed_edges = yaml.safe_load((self.config_dir / "transmission_seed.yaml").read_text(encoding="utf-8"))["edges"]
+        # user-approved candidate edges (written by the system page) are merged on seed
+        approved_path = self.config_dir / "approved_edges.yaml"
+        if approved_path.exists():
+            approved = yaml.safe_load(approved_path.read_text(encoding="utf-8")) or {}
+            seed_edges = seed_edges + list(approved.get("edges", []))
 
         # asset nodes
         for a in assets:
@@ -54,7 +59,8 @@ class GraphRepository:
         factors = set(vocab["factors"])
         used_factors = {e["src"] for e in seed_edges if e["src"] in factors}
         for f in used_factors:
-            self.save_node(GraphNode(id=f, kind="factor", name=f, layer="factor", resident=False))
+            if self.get_node(f) is None:
+                self.save_node(GraphNode(id=f, kind="factor", name=f, layer="factor", resident=False))
         # edges
         for e in seed_edges:
             edge = GraphEdge(
@@ -63,6 +69,19 @@ class GraphRepository:
                 status="active",
             )
             self.save_edge(edge)
+
+    def append_approved_edge(self, edge: GraphEdge) -> None:
+        """Persist a promoted candidate to config/approved_edges.yaml so it survives re-seed."""
+        path = self.config_dir / "approved_edges.yaml"
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else None
+        doc = doc or {"edges": []}
+        doc.setdefault("edges", [])
+        if not any(x.get("src") == edge.src and x.get("dst") == edge.dst for x in doc["edges"]):
+            doc["edges"].append({
+                "src": edge.src, "dst": edge.dst, "sign": edge.sign,
+                "driver_label": edge.driver_label, "init_weight": round(edge.weight, 4),
+            })
+            path.write_text(yaml.safe_dump(doc, allow_unicode=True, sort_keys=False), encoding="utf-8")
 
     # ---- node CRUD ----
     def save_node(self, node: GraphNode) -> None:
