@@ -118,7 +118,7 @@ class GraphNarrativeManager:
         if driver not in vocab:
             return None
         src, dst = data.get("src"), data.get("dst", asset_id)
-        if not src:
+        if not src or src == dst:        # no self-loops (LLM sometimes echoes the asset as its own driver)
             return None
         edge_id = f"{src}->{dst}"
         if edge_id in existing_edge_ids:

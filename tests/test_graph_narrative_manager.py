@@ -136,3 +136,9 @@ def test_route_assets_none_on_llm_error():
     from llm.base import LLMError
     mgr = GraphNarrativeManager(llm_client=FakeLLMClient(error=LLMError("down")))
     assert mgr.route_assets("x", ["GOLD"]) is None     # None = error, not [] (no-match)
+
+
+def test_propose_edge_rejects_self_loop():
+    mgr = GraphNarrativeManager(llm_client=FakeLLMClient(responses=[
+        json.dumps({"src": "MOVE", "dst": "MOVE", "sign": 1, "driver_label": "避险地缘"})]))
+    assert mgr.propose_edge("x", "MOVE", vocab={"避险地缘"}, existing_edge_ids=set()) is None
