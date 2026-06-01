@@ -8,7 +8,7 @@ from presenters.data_presenter import build_debug_payload, build_news_detail_vie
 from presenters.graph_presenter import build_graph_view, graph_to_dot, node_shift_history
 from presenters.ingestion_presenter import build_ingestion_qa_overview
 from presenters.operations_presenter import build_operations_overview
-from presenters.today_presenter import build_shifts_view, build_today_view
+from presenters.today_presenter import build_allocation_overview, build_shifts_view, build_today_view
 from repositories.graph_repository import GraphRepository
 from repositories.news_repository import SQLiteNewsRepository
 from view_models.ingestion_qa import IngestionQAOverview
@@ -65,6 +65,8 @@ def main() -> None:
 
     with today_tab:
         _render_today_view(st, today)
+        st.divider()
+        _render_allocation_overview(st, build_allocation_overview(graph_repo))
 
     with tree_tab:
         _render_world_tree(st, graph_repo)
@@ -101,6 +103,9 @@ def main() -> None:
             _render_ingestion_qa_view(st, ingestion_qa)
 
 
+_LEAN_BADGE = {"偏多": "🟢 偏多", "偏空": "🔴 偏空", "中性": "⚪ 中性"}
+
+
 def _render_today_view(st: Any, t: Any) -> None:
     st.subheader("今日叙事 · Top Narratives")
     st.caption("从所有资产里排出最值得看的几条:正在驱动切换 > 逼近切换 > 证据多 > 方向性强。")
@@ -110,19 +115,34 @@ def _render_today_view(st: Any, t: Any) -> None:
     st.caption(f"共 {t.total_assets} 条活跃资产叙事,展示最值得看的 {len(t.cards)} 条。")
     for c in t.cards:
         with st.container(border=True):
-            flags = ""
+            head = f"**{c.name}**　{_LEAN_BADGE.get(c.lean, c.lean)}（强度 {round(c.strength*100)}% · 信心 {c.conviction}）"
             if c.is_shifting:
-                flags += "　🔀 驱动切换中"
-            if c.is_contested:
-                flags += "　⚠️ 逼近切换"
-            st.markdown(f"**{c.name}**　主导驱动：`{c.dominant_driver or '—'}`{flags}")
-            if c.read_line:
-                st.info(c.read_line)
-            cols = st.columns([1, 1, 2])
-            cols[0].metric("方向性强度", f"{round(c.strength * 100)}%")
-            cols[1].metric("置信", f"{round(c.confidence * 100)}%")
+                head += "　🔀 已切换"
+            st.markdown(head)
+            # 当前状态(叙事 LLM 读数) vs 挑战(确定性推导),分行标清
+            st.markdown(f"📖 **当前**：主导 `{c.dominant_driver or '—'}`" + (f" — {c.read_line}" if c.read_line else ""))
+            if c.challenger:
+                badge = "🔁 方向反转风险" if c.switch_kind == "方向反转风险" else "🔀 同向换驱动"
+                st.markdown(f"⚠️ **挑战**：`{c.challenger}` 正逼近 — {badge}")
+                if c.flip_note:
+                    st.caption(c.flip_note)
             tag = f"regime: {c.tags_regime}" if c.tags_regime else "regime: —"
-            cols[2].caption(f"{tag}　·　证据 {c.evidence_count} 条")
+            st.caption(f"{tag}　·　证据 {c.evidence_count} 条")
+
+
+def _render_allocation_overview(st: Any, a: Any) -> None:
+    st.markdown("### 📊 资产配置速览（按 regime · 方向倾向）")
+    st.caption("以下立场由**图谱状态确定性推导**(方向←强度、信心←置信、反转开关←逼近的异号驱动),非 LLM 意见;仅供研究,不构成投资建议。")
+    if not a.available:
+        st.info("还没有带 regime 标签的活跃资产。跑过整合后,这里按 risk-on/off、再通胀等聚类。")
+        return
+    for c in a.clusters:
+        with st.container(border=True):
+            st.markdown(f"**{c.regime}**")
+            if c.long_names:
+                st.markdown(f"🟢 偏多：{', '.join(c.long_names)}")
+            if c.short_names:
+                st.markdown(f"🔴 偏空：{', '.join(c.short_names)}")
 
 
 def _render_world_tree(st: Any, graph_repo: Any) -> None:
@@ -170,12 +190,14 @@ def _render_shifts_view(st: Any, v: Any) -> None:
     if not v.shifts:
         st.caption("当前没有已确认的驱动切换。")
     for s in v.shifts:
-        st.error(f"**{s.name}** 的主导逻辑从 `{s.from_driver}` 切到 `{s.to_driver}`　·　`{_format_datetime(s.at)}`")
+        kind = "🔁 方向反转" if s.is_reversal else "🔀 同向换驱动"
+        st.error(f"**{s.name}**：`{s.from_driver}` → `{s.to_driver}`　{kind}　·　`{_format_datetime(s.at)}`\n\n{s.implication}")
     st.markdown("### ⚠️ 逼近切换(竞争驱动)")
     if not v.contested:
         st.caption("当前没有逼近切换的资产。")
     for c in v.contested:
-        st.warning(f"**{c.name}**：`{c.leader}` 领先,但 `{c.runner_up}` 正在逼近(差 {c.gap})。")
+        kind = "🔁 方向反转风险" if c.is_reversal else "🔀 同向换驱动"
+        st.warning(f"**{c.name}**：`{c.leader}` 领先,`{c.runner_up}` 逼近(差 {c.gap})　{kind}\n\n{c.implication}")
 
 
 def _render_candidate_panel(st: Any, graph_repo: Any) -> None:
