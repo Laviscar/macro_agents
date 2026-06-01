@@ -74,3 +74,31 @@ def test_consolidate_proposes_candidate_when_no_edge_matches(tmp_path):
     assert out["consolidated_evidence"] == 1
     cands = graph.list_candidates()
     assert any(c.dst == "URA" and c.driver_label == "AI资本开支" for c in cands)
+
+
+def test_consolidate_caps_batch_and_reports_remaining(tmp_path):
+    news = SQLiteNewsRepository(tmp_path / "n.sqlite3")
+    graph = GraphRepository(tmp_path, CONFIG)
+    graph.seed_if_empty()
+    for i in range(5):
+        _seed_evidence(news, f"claim {i}", f"ev{i}")
+    # route every evidence to GOLD, attribute to 央行购金 (2 responses per evidence) — but cap=2
+    responses = []
+    for _ in range(2):
+        responses += [json.dumps({"assets": ["GOLD"]}),
+                      json.dumps({"driver_label": "央行购金", "aligns_sign": 1}),
+                      json.dumps({"title": "g", "thesis": "t", "read_line": "r", "regime": "滞胀", "countries": []})]
+    mgr = GraphNarrativeManager(llm_client=FakeLLMClient(responses=responses * 3))
+    out = consolidate_graph(news, graph, mgr, VOCAB, REGIMES, tmp_path / "rs.json", now_fn=now_iso, max_evidence=2)
+    assert out["consolidated_evidence"] == 2 and out["remaining"] == 3
+
+
+def test_consolidate_counts_route_errors(tmp_path):
+    from llm.base import LLMError
+    news = SQLiteNewsRepository(tmp_path / "n.sqlite3")
+    graph = GraphRepository(tmp_path, CONFIG)
+    graph.seed_if_empty()
+    _seed_evidence(news, "claim", "ev1")
+    mgr = GraphNarrativeManager(llm_client=FakeLLMClient(error=LLMError("down")))
+    out = consolidate_graph(news, graph, mgr, VOCAB, REGIMES, tmp_path / "rs.json", now_fn=now_iso)
+    assert out["route_errors"] == 1 and out["touched"] == 0

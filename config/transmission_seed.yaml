@@ -61,3 +61,23 @@ edges:
   # NDX->NVDA(asset→asset)改为 风险偏好 直连,避免隐含传导(传导留 v1.7)
   - {src: 风险偏好,   dst: NVDA,    sign: 1,  driver_label: 风险偏好,     init_weight: 0.3}
   - {src: WTI,        dst: XLE,     sign: 1,  driver_label: 能源供给,     init_weight: 0.4}
+
+  # ---- 种子 v2 补充:给偏单一的常驻节点补驱动(STAR50 等不再只被美债驱动) ----
+  # 科创50:国内政策/风险偏好/AI 才是主导,美债实际利率降为次要全球贴现率
+  - {src: 中国增长政策, dst: STAR50, sign: 1,  driver_label: 中国增长政策, init_weight: 0.4}
+  - {src: 风险偏好,   dst: STAR50,  sign: 1,  driver_label: 风险偏好,     init_weight: 0.3}
+  - {src: AI资本开支, dst: STAR50,  sign: 1,  driver_label: AI资本开支,   init_weight: 0.3}
+  # 标普:盈利(增长)+ 贴现率,不只风险偏好
+  - {src: 增长预期,   dst: SPX,     sign: 1,  driver_label: 增长预期,     init_weight: 0.3}
+  - {src: 实际利率,   dst: SPX,     sign: -1, driver_label: 实际利率,     init_weight: 0.2}
+  # 2Y:Fed 对通胀/增长的反应函数
+  - {src: 通胀预期,   dst: US2Y,    sign: 1,  driver_label: 通胀预期,     init_weight: 0.3}
+  - {src: 增长预期,   dst: US2Y,    sign: 1,  driver_label: 增长预期,     init_weight: 0.2}
+  # 美日:美日利差(用政策利率代理)
+  - {src: 政策利率,   dst: USDJPY,  sign: 1,  driver_label: 政策利率,     init_weight: 0.3}
+  # 半导体ETF:风险偏好 + 半导体周期(制造业周期)
+  - {src: 风险偏好,   dst: SMH,     sign: 1,  driver_label: 风险偏好,     init_weight: 0.3}
+  - {src: 制造业周期, dst: SMH,     sign: 1,  driver_label: 制造业周期,   init_weight: 0.2}
+  # 高收益利差:风险偏好收紧/增长预期
+  - {src: 风险偏好,   dst: HY_Spread, sign: -1, driver_label: 风险偏好,   init_weight: 0.3}
+  - {src: 增长预期,   dst: HY_Spread, sign: -1, driver_label: 增长预期,   init_weight: 0.2}

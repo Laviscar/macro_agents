@@ -155,7 +155,8 @@ def build_run_loop(
         Stage("analysis", _interval("RUN_LOOP_ANALYSIS_SECONDS", 900),
               lambda: analyze_pending(repository, analyst, **analysis_kwargs)),
         Stage("consolidation", _interval("RUN_LOOP_CONSOLIDATION_SECONDS", 3600),
-              lambda: consolidate_graph(repository, graph_repo, graph_manager, vocab, regimes, run_state_path)),
+              lambda: consolidate_graph(repository, graph_repo, graph_manager, vocab, regimes,
+                                        run_state_path, max_evidence=int(_interval("CONSOLIDATE_MAX_EVIDENCE", 50)))),
     ]
     global _last_narrative_manager
     _last_narrative_manager = graph_manager

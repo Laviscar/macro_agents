@@ -111,24 +111,40 @@ def consolidate_graph(
     regimes: set[str],
     run_state_path: str | Path,
     now_fn=now_iso,
+    max_evidence: int = 50,
 ) -> dict:
     """v1.6 consolidation: route new evidence to assets, attribute to driver edges
     (or propose candidate edges), recompute node strength + dominant driver, persist
-    driver shifts, narrate, and apply theme dormancy. Watermark-incremental."""
+    driver shifts, narrate, and apply theme dormancy.
+
+    Watermark-incremental and **budget-bounded**: processes at most `max_evidence`
+    of the oldest-unseen evidence per run, advancing the watermark only to the last
+    item actually processed — so a large backlog is consumed in capped chunks across
+    runs instead of one budget-blowing pass. Returns failure counts so silent LLM
+    errors are visible."""
     graph_repo.seed_if_empty()
     state_doc = read_json(run_state_path, default={}) or {}
     watermark = state_doc.get("last_consolidation_at", "")
-    evidence_list = repository.get_evidence_since(watermark)
+    evidence_list = repository.get_evidence_since(watermark)  # ascending by created_at
     if not evidence_list:
-        return {"consolidated_evidence": 0, "shifts": 0, "touched": 0}
+        return {"consolidated_evidence": 0, "shifts": 0, "touched": 0,
+                "route_errors": 0, "unrouted": 0, "candidates": 0, "remaining": 0}
 
-    now_str = now_fn()
-    now_dt = _parse_iso(now_str)
+    batch = evidence_list[:max_evidence]
+    now_dt = _parse_iso(now_fn())
     asset_ids = [n.id for n in graph_repo.list_nodes() if n.kind == "asset"]
     touched: set[str] = set()
+    route_errors = unrouted = candidates = 0
 
-    for ev in evidence_list:
-        for aid in graph_manager.route_assets(ev.claim, asset_ids):
+    for ev in batch:
+        routed = graph_manager.route_assets(ev.claim, asset_ids)
+        if routed is None:        # LLM/parse failure — count it, don't pretend it's "none"
+            route_errors += 1
+            continue
+        if not routed:
+            unrouted += 1
+            continue
+        for aid in routed:
             edges = graph_repo.incoming_edges(aid)
             result = graph_manager.attribute(ev.claim, aid, edges)
             if result is not None:
@@ -142,6 +158,7 @@ def consolidate_graph(
                 cand = graph_manager.propose_edge(ev.claim, aid, vocab, existing)
                 if cand is not None:
                     graph_repo.add_candidate_edge(cand)
+                    candidates += 1
             touched.add(aid)
 
     shifts = 0
@@ -156,6 +173,9 @@ def consolidate_graph(
             graph_repo.save_node(node)
 
     graph_manager.apply_dormancy(graph_repo, now_dt)
-    state_doc["last_consolidation_at"] = now_str
+    # advance watermark only to the last processed item, so the rest is picked up next run
+    state_doc["last_consolidation_at"] = batch[-1].created_at
     write_json(run_state_path, state_doc)
-    return {"consolidated_evidence": len(evidence_list), "shifts": shifts, "touched": len(touched)}
+    return {"consolidated_evidence": len(batch), "shifts": shifts, "touched": len(touched),
+            "route_errors": route_errors, "unrouted": unrouted, "candidates": candidates,
+            "remaining": len(evidence_list) - len(batch)}

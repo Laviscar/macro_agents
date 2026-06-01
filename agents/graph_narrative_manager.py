@@ -39,8 +39,10 @@ class GraphNarrativeManager:
         self.audit_panel = audit_panel
 
     # ---- Phase 5: route a news claim to the asset(s) it concerns ----
-    def route_assets(self, evidence_claim: str, asset_ids: list[str]) -> list[str]:
-        """Pick which of the known assets a news claim is about (may be several, or none)."""
+    def route_assets(self, evidence_claim: str, asset_ids: list[str]) -> list[str] | None:
+        """Pick which tracked assets a claim concerns. Returns [] when none apply, or
+        None on an LLM/parse failure (so the caller can count failures instead of
+        silently treating an error as 'no relevant assets')."""
         if self._llm is None or not asset_ids:
             return []
         system = "You pick which tracked assets a macro news claim concerns. STRICT JSON only."
@@ -56,7 +58,7 @@ class GraphNarrativeManager:
             )
             data = _parse_json(resp.text)
         except (LLMError, ValueError, KeyError):
-            return []
+            return None
         allowed = set(asset_ids)
         return [a for a in (data.get("assets") or []) if a in allowed]
 

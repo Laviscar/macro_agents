@@ -130,3 +130,9 @@ def test_dormancy_keeps_active_theme_with_fresh_evidence(tmp_path):
     repo.save_edge(e)
     mgr.apply_dormancy(repo, NOW, dormant_days=21)
     assert repo.get_node("NVDA").status == "active"
+
+
+def test_route_assets_none_on_llm_error():
+    from llm.base import LLMError
+    mgr = GraphNarrativeManager(llm_client=FakeLLMClient(error=LLMError("down")))
+    assert mgr.route_assets("x", ["GOLD"]) is None     # None = error, not [] (no-match)
