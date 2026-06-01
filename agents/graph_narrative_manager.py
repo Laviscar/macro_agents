@@ -32,8 +32,9 @@ class GraphNarrativeManager:
     recompute/shift/dormancy steps are deterministic (no LLM).
     """
 
-    def __init__(self, llm_client: LLMClient | None = None, audit_panel=None) -> None:
-        self._llm = llm_client
+    def __init__(self, llm_client: LLMClient | None = None, router_client: LLMClient | None = None, audit_panel=None) -> None:
+        self._llm = llm_client                       # reasoning tier: attribution / narration
+        self._router = router_client or llm_client   # cheap tier: asset routing (classification)
         # Reserved: the V1.5 AuditPanel will critique driver-shift decisions in a
         # v1.6.x follow-up. Stored here so its env config stays live; not yet invoked.
         self.audit_panel = audit_panel
@@ -43,7 +44,7 @@ class GraphNarrativeManager:
         """Pick which tracked assets a claim concerns. Returns [] when none apply, or
         None on an LLM/parse failure (so the caller can count failures instead of
         silently treating an error as 'no relevant assets')."""
-        if self._llm is None or not asset_ids:
+        if self._router is None or not asset_ids:
             return []
         system = "You pick which tracked assets a macro news claim concerns. STRICT JSON only."
         user = (
@@ -52,9 +53,9 @@ class GraphNarrativeManager:
             "Empty list if none apply."
         )
         try:
-            resp = self._llm.complete(
+            resp = self._router.complete(
                 [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
-                temperature=0.0, max_tokens=512,
+                temperature=0.0, max_tokens=4096,
             )
             data = _parse_json(resp.text)
         except (LLMError, ValueError, KeyError):
@@ -64,7 +65,7 @@ class GraphNarrativeManager:
 
     # ---- Task 13: attribute evidence to an existing edge ----
     def attribute(self, evidence_claim: str, asset_id: str, incoming_edges: list[GraphEdge]) -> AttributionResult | None:
-        if self._llm is None or not incoming_edges:
+        if self._router is None or not incoming_edges:
             return None
         drivers = {e.driver_label for e in incoming_edges}
         system = (
@@ -78,9 +79,9 @@ class GraphNarrativeManager:
             "Pick null if the claim does not fit any candidate driver."
         )
         try:
-            resp = self._llm.complete(
+            resp = self._router.complete(
                 [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
-                temperature=0.0, max_tokens=512,
+                temperature=0.0, max_tokens=4096,
             )
             data = _parse_json(resp.text)
         except (LLMError, ValueError, KeyError):
@@ -93,7 +94,7 @@ class GraphNarrativeManager:
 
     # ---- Task 14: propose a controlled candidate edge ----
     def propose_edge(self, evidence_claim: str, asset_id: str, vocab: set[str], existing_edge_ids: set[str]) -> GraphEdge | None:
-        if self._llm is None:
+        if self._router is None:
             return None
         system = (
             "You propose ONE new driver edge for an asset, drawn from a controlled "
@@ -106,9 +107,9 @@ class GraphNarrativeManager:
             '"sign": 1 or -1, "driver_label": <one factor from the vocabulary>}.'
         )
         try:
-            resp = self._llm.complete(
+            resp = self._router.complete(
                 [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
-                temperature=0.0, max_tokens=512,
+                temperature=0.0, max_tokens=4096,
             )
             data = _parse_json(resp.text)
         except (LLMError, ValueError, KeyError):
@@ -163,7 +164,7 @@ class GraphNarrativeManager:
         try:
             resp = self._llm.complete(
                 [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
-                temperature=0.0, max_tokens=1024,
+                temperature=0.0, max_tokens=4096,
             )
             data = _parse_json(resp.text)
         except (LLMError, ValueError, KeyError):

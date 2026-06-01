@@ -129,7 +129,10 @@ def build_run_loop(
 
     # v1.6: narrative graph driven by the narrative-tier LLM.
     graph_repo = GraphRepository(storage_root=storage_root, config_dir="config")
-    graph_manager = GraphNarrativeManager(llm_client=narrative_client, audit_panel=audit_panel)
+    # routing/attribution/proposal = constrained classification → cheap triage client;
+    # narration (prose) → reasoning narrative client.
+    graph_manager = GraphNarrativeManager(
+        llm_client=narrative_client, router_client=triage_client, audit_panel=audit_panel)
     _vocab_doc = yaml.safe_load((Path("config") / "driver_vocabulary.yaml").read_text(encoding="utf-8"))
     vocab = set(_vocab_doc.get("factors", []))
     regimes = set(_vocab_doc.get("regimes", []))
