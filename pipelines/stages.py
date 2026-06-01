@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import datetime
 from pathlib import Path
 
 from agents.analyst import AnalystAgent
@@ -9,6 +10,7 @@ from agents.triage import TriageAgent
 from harness.coordinator import _load_or_build_resource_card, load_narrative_state, persist_narrative_state
 from pipelines.narrative_update import update_from_evidence
 from repositories.news_repository import SQLiteNewsRepository
+from schemas.graph_edge import EdgeEvidenceRef
 from utils.clock import now_iso
 from utils.io import read_json, write_json
 
@@ -95,3 +97,65 @@ def consolidate(
     state_doc["last_consolidation_at"] = now_iso()
     write_json(run_state_path, state_doc)
     return {"consolidated_evidence": len(evidence_list)}
+
+
+def _parse_iso(ts: str) -> datetime:
+    return datetime.fromisoformat(ts.replace("Z", "+00:00"))
+
+
+def consolidate_graph(
+    repository: SQLiteNewsRepository,
+    graph_repo,
+    graph_manager,
+    vocab: set[str],
+    regimes: set[str],
+    run_state_path: str | Path,
+    now_fn=now_iso,
+) -> dict:
+    """v1.6 consolidation: route new evidence to assets, attribute to driver edges
+    (or propose candidate edges), recompute node strength + dominant driver, persist
+    driver shifts, narrate, and apply theme dormancy. Watermark-incremental."""
+    graph_repo.seed_if_empty()
+    state_doc = read_json(run_state_path, default={}) or {}
+    watermark = state_doc.get("last_consolidation_at", "")
+    evidence_list = repository.get_evidence_since(watermark)
+    if not evidence_list:
+        return {"consolidated_evidence": 0, "shifts": 0, "touched": 0}
+
+    now_str = now_fn()
+    now_dt = _parse_iso(now_str)
+    asset_ids = [n.id for n in graph_repo.list_nodes() if n.kind == "asset"]
+    touched: set[str] = set()
+
+    for ev in evidence_list:
+        for aid in graph_manager.route_assets(ev.claim, asset_ids):
+            edges = graph_repo.incoming_edges(aid)
+            result = graph_manager.attribute(ev.claim, aid, edges)
+            if result is not None:
+                edge = next(e for e in edges if e.driver_label == result.edge_driver)
+                edge.supporting_evidence.append(EdgeEvidenceRef(
+                    evidence_id=ev.id, created_at=ev.created_at,
+                    contribution=min(1.0, float(ev.strength) * float(ev.confidence))))
+                graph_repo.save_edge(edge)
+            else:
+                existing = {e.id for e in graph_repo.list_edges()} | {c.id for c in graph_repo.list_candidates()}
+                cand = graph_manager.propose_edge(ev.claim, aid, vocab, existing)
+                if cand is not None:
+                    graph_repo.add_candidate_edge(cand)
+            touched.add(aid)
+
+    shifts = 0
+    for aid in touched:
+        shift = graph_manager.recompute_node(graph_repo, aid, now_dt)
+        if shift is not None:
+            graph_repo.save_driver_shift(shift)
+            shifts += 1
+        node = graph_repo.get_node(aid)
+        if node is not None:
+            graph_manager.narrate_node(node, graph_repo.incoming_edges(aid), regimes)
+            graph_repo.save_node(node)
+
+    graph_manager.apply_dormancy(graph_repo, now_dt)
+    state_doc["last_consolidation_at"] = now_str
+    write_json(run_state_path, state_doc)
+    return {"consolidated_evidence": len(evidence_list), "shifts": shifts, "touched": len(touched)}

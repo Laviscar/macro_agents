@@ -31,7 +31,8 @@ class GraphRepository:
         self.nodes_dir = self.storage_root / "graph_nodes"
         self.edges_dir = self.storage_root / "graph_edges"
         self.candidates_dir = self.storage_root / "candidate_edges"
-        for d in (self.nodes_dir, self.edges_dir, self.candidates_dir):
+        self.shifts_dir = self.storage_root / "driver_shifts"
+        for d in (self.nodes_dir, self.edges_dir, self.candidates_dir, self.shifts_dir):
             d.mkdir(parents=True, exist_ok=True)
 
     # ---- seeding ----
@@ -128,3 +129,14 @@ class GraphRepository:
         path = self.candidates_dir / f"{_safe_filename(edge_id)}.json"
         if path.exists():
             path.unlink()
+
+    # ---- driver shifts (= the new "分歧预警") ----
+    def save_driver_shift(self, shift) -> None:
+        name = _safe_filename(f"{shift.node_id}_{shift.at}")
+        (self.shifts_dir / f"{name}.json").write_text(
+            shift.model_dump_json() if hasattr(shift, "model_dump_json") else json.dumps(shift),
+            encoding="utf-8")
+
+    def list_driver_shifts(self) -> list[dict]:
+        return [json.loads(p.read_text(encoding="utf-8"))
+                for p in sorted(self.shifts_dir.glob("*.json"))]

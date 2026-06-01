@@ -87,14 +87,17 @@ def build_run_loop(
     """
     from datetime import datetime, timedelta, timezone
 
+    import yaml
+
     from agents.analyst import AnalystAgent
-    from agents.narrative_manager import NarrativeManagerAgent
+    from agents.graph_narrative_manager import GraphNarrativeManager
     from agents.news_sorter import NewsSorterAgent
     from agents.triage import TriageAgent
     from llm.config import load_llm_config
     from llm.factory import build_llm_client
     from pipelines.live_ingest import build_polling_service, load_news_service_config, resolve_news_service_config_path
-    from pipelines.stages import analyze_pending, consolidate, triage_pending
+    from pipelines.stages import analyze_pending, consolidate_graph, triage_pending
+    from repositories.graph_repository import GraphRepository
     from repositories.news_repository import SQLiteNewsRepository
 
     repository = SQLiteNewsRepository(db_path)
@@ -124,7 +127,12 @@ def build_run_loop(
         if seat_clients:
             audit_panel = AuditPanel(seat_clients, rounds=rounds, mode=audit_mode)
 
-    narrative_manager = NarrativeManagerAgent(llm_client=narrative_client, audit_panel=audit_panel)
+    # v1.6: narrative graph driven by the narrative-tier LLM.
+    graph_repo = GraphRepository(storage_root=storage_root, config_dir="config")
+    graph_manager = GraphNarrativeManager(llm_client=narrative_client, audit_panel=audit_panel)
+    _vocab_doc = yaml.safe_load((Path("config") / "driver_vocabulary.yaml").read_text(encoding="utf-8"))
+    vocab = set(_vocab_doc.get("factors", []))
+    regimes = set(_vocab_doc.get("regimes", []))
 
     cfg_path = resolve_news_service_config_path(Path(config_path)).resolve()
     ingest_service = build_polling_service(load_news_service_config(cfg_path), repository)
@@ -147,10 +155,10 @@ def build_run_loop(
         Stage("analysis", _interval("RUN_LOOP_ANALYSIS_SECONDS", 900),
               lambda: analyze_pending(repository, analyst, **analysis_kwargs)),
         Stage("consolidation", _interval("RUN_LOOP_CONSOLIDATION_SECONDS", 3600),
-              lambda: consolidate(repository, narrative_manager, storage_root, run_state_path)),
+              lambda: consolidate_graph(repository, graph_repo, graph_manager, vocab, regimes, run_state_path)),
     ]
     global _last_narrative_manager
-    _last_narrative_manager = narrative_manager
+    _last_narrative_manager = graph_manager
     return RunLoop(stages)
 
 

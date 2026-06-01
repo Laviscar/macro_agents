@@ -32,8 +32,33 @@ class GraphNarrativeManager:
     recompute/shift/dormancy steps are deterministic (no LLM).
     """
 
-    def __init__(self, llm_client: LLMClient | None = None) -> None:
+    def __init__(self, llm_client: LLMClient | None = None, audit_panel=None) -> None:
         self._llm = llm_client
+        # Reserved: the V1.5 AuditPanel will critique driver-shift decisions in a
+        # v1.6.x follow-up. Stored here so its env config stays live; not yet invoked.
+        self.audit_panel = audit_panel
+
+    # ---- Phase 5: route a news claim to the asset(s) it concerns ----
+    def route_assets(self, evidence_claim: str, asset_ids: list[str]) -> list[str]:
+        """Pick which of the known assets a news claim is about (may be several, or none)."""
+        if self._llm is None or not asset_ids:
+            return []
+        system = "You pick which tracked assets a macro news claim concerns. STRICT JSON only."
+        user = (
+            f"Tracked assets: {asset_ids}\nNews claim: {evidence_claim}\n\n"
+            'Return {"assets": [<subset of tracked assets the claim concerns>]}. '
+            "Empty list if none apply."
+        )
+        try:
+            resp = self._llm.complete(
+                [LLMMessage(role="system", content=system), LLMMessage(role="user", content=user)],
+                temperature=0.0, max_tokens=512,
+            )
+            data = _parse_json(resp.text)
+        except (LLMError, ValueError, KeyError):
+            return []
+        allowed = set(asset_ids)
+        return [a for a in (data.get("assets") or []) if a in allowed]
 
     # ---- Task 13: attribute evidence to an existing edge ----
     def attribute(self, evidence_claim: str, asset_id: str, incoming_edges: list[GraphEdge]) -> AttributionResult | None:

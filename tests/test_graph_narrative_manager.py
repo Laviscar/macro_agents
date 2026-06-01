@@ -17,6 +17,18 @@ def _e(label, w, sign=1, dst="GOLD"):
     return e
 
 
+# ---- Phase 5: routing ----
+def test_route_assets_filters_to_known():
+    llm = FakeLLMClient(responses=[json.dumps({"assets": ["GOLD", "外星资产"]})])
+    mgr = GraphNarrativeManager(llm_client=llm)
+    assert mgr.route_assets("金价创新高", ["GOLD", "NDX", "WTI"]) == ["GOLD"]
+
+
+def test_route_assets_empty():
+    llm = FakeLLMClient(responses=[json.dumps({"assets": []})])
+    assert GraphNarrativeManager(llm_client=llm).route_assets("无关新闻", ["GOLD"]) == []
+
+
 # ---- Task 13: attribution ----
 def test_attributes_evidence_to_existing_edge():
     llm = FakeLLMClient(responses=[json.dumps({"driver_label": "央行购金", "aligns_sign": 1})])
