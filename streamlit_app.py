@@ -170,9 +170,11 @@ def _render_world_tree(st: Any, graph_repo: Any) -> None:
             st.write(f"主导驱动：**{node.dominant_driver or '—'}** · 方向性强度 {round(node.strength*100)}% · "
                      f"regime {node.tags_regime or '—'} · 国家 {', '.join(node.tags_countries) or '—'}")
             incoming = sorted(graph_repo.incoming_edges(focus), key=lambda e: e.weight, reverse=True)
-            st.markdown("**候选驱动(入边,按权重)**")
+            nature = graph_repo.factor_nature()
+            st.markdown("**候选驱动(入边,按权重;性质=结构性最扎实/情绪事件最脆弱)**")
             for e in incoming:
-                st.caption(f"{'🟢+' if e.sign > 0 else '🔴−'} {e.driver_label}　w={round(e.weight,2)}　← {e.src}　(证据 {len(e.supporting_evidence)})")
+                nat = f"·{nature[e.driver_label]}" if e.driver_label in nature else ""
+                st.caption(f"{'🟢+' if e.sign > 0 else '🔴−'} {e.driver_label}{nat}　w={round(e.weight,2)}　← {e.src}　(证据 {len(e.supporting_evidence)})")
             hist = node_shift_history(graph_repo, focus)
             if hist:
                 st.markdown("**驱动切换史**")

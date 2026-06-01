@@ -28,8 +28,25 @@ def _conviction(confidence: float) -> str:
     return "高" if confidence >= 0.66 else ("中" if confidence >= 0.4 else "低")
 
 
-def _stance(node, incoming_edges) -> dict:
+_NATURE_RANK = {"结构性": 3, "周期性": 2, "情绪事件": 1}
+
+
+def _quality_phrase(frm: str, to: str, nature: dict) -> str:
+    """同向换驱动时的支撑质量判断:结构性最扎实,情绪事件最脆弱。"""
+    nf, nt = nature.get(frm), nature.get(to)
+    if not nf or not nt:
+        return ""
+    rf, rt = _NATURE_RANK.get(nf, 2), _NATURE_RANK.get(nt, 2)
+    if rf > rt:
+        return f"支撑质量↓:由{nf}「{frm}」转向更脆弱的{nt}「{to}」,涨跌更依赖短期因素"
+    if rf < rt:
+        return f"支撑质量↑:由{nf}「{frm}」转向更扎实的{nt}「{to}」,逻辑更可持续"
+    return f"驱动性质相近(都属{nf})"
+
+
+def _stance(node, incoming_edges, nature: dict | None = None) -> dict:
     """确定性立场:从图谱状态推导(非 LLM)。返回 lean/conviction/challenger/switch_kind/flip_note。"""
+    nature = nature or {}
     out = {"lean": _lean(node.strength), "conviction": _conviction(node.confidence),
            "challenger": None, "switch_kind": None, "flip_note": None}
     ranked = sorted(incoming_edges, key=lambda e: e.weight, reverse=True)
@@ -37,12 +54,15 @@ def _stance(node, incoming_edges) -> dict:
             and (ranked[0].weight - ranked[1].weight) < DEFAULT_CONTESTED_GAP and ranked[0].weight > 0):
         leader, runner = ranked[0], ranked[1]
         out["challenger"] = runner.driver_label
+        nf, nt = nature.get(leader.driver_label), nature.get(runner.driver_label)
+        natures = f"（{nf or '?'} → {nt or '?'}）" if (nf or nt) else ""
         if leader.sign != runner.sign:
             out["switch_kind"] = "方向反转风险"
-            out["flip_note"] = f"若主导切到「{runner.driver_label}」(异号),{node.name}方向倾向或反转"
+            out["flip_note"] = f"若主导切到「{runner.driver_label}」(异号){natures},{node.name}方向倾向或反转"
         else:
             out["switch_kind"] = "同向换驱动"
-            out["flip_note"] = f"方向不变,但驱动从「{leader.driver_label}」转向「{runner.driver_label}」(性质/可持续性变化)"
+            q = _quality_phrase(leader.driver_label, runner.driver_label, nature)
+            out["flip_note"] = f"方向不变,驱动从「{leader.driver_label}」→「{runner.driver_label}」{natures}。{q}"
     return out
 
 
@@ -78,9 +98,10 @@ def build_today_view(graph_repo, top_n: int = 7, pinned: list[str] | None = None
     # pinned first, then by score desc
     scored.sort(key=lambda t: (t[0].id not in pinned, -t[2]))
 
+    nature = graph_repo.factor_nature()
     cards = []
     for (n, inc, _) in scored[:top_n]:
-        s = _stance(n, inc)
+        s = _stance(n, inc, nature)
         cards.append(TodayCard(
             asset_id=n.id, name=n.name, dominant_driver=n.dominant_driver, read_line=n.read_line,
             strength=n.strength, confidence=n.confidence, tags_regime=n.tags_regime,
@@ -117,6 +138,10 @@ def build_shifts_view(graph_repo) -> ShiftsView:
     """分歧预警视图:已切换(driver_shifts) + 正在逼近切换(contested),含方向反转判定与含义。"""
     graph_repo.seed_if_empty()
     name_by_id = {n.id: n.name for n in graph_repo.list_nodes()}
+    nature = graph_repo.factor_nature()
+
+    def _nat(d):  # "结构性" -> "(结构性)" else ""
+        return f"({nature[d]})" if d in nature else ""
 
     shifts = []
     for s in sorted(graph_repo.list_driver_shifts(), key=lambda s: s.get("at", ""), reverse=True):
@@ -124,10 +149,14 @@ def build_shifts_view(graph_repo) -> ShiftsView:
         fs, ts = _sign_of(edges, s["from_driver"]), _sign_of(edges, s["to_driver"])
         reversal = fs is not None and ts is not None and fs != ts
         name = name_by_id.get(s["node_id"], s["node_id"])
-        impl = (f"方向反转:主导从「{s['from_driver']}」切到异号的「{s['to_driver']}」,{name} 多空逻辑翻转"
-                if reversal else f"同向换驱动:涨跌方向不变,但驱动由「{s['from_driver']}」转为「{s['to_driver']}」(性质变化)")
-        shifts.append(ShiftItem(node_id=s["node_id"], name=name, from_driver=s["from_driver"],
-                                to_driver=s["to_driver"], at=s["at"], is_reversal=reversal, implication=impl))
+        frm, to = s["from_driver"], s["to_driver"]
+        if reversal:
+            impl = f"方向反转:主导从「{frm}」{_nat(frm)}切到异号的「{to}」{_nat(to)},{name} 多空逻辑翻转"
+        else:
+            q = _quality_phrase(frm, to, nature)
+            impl = f"同向换驱动:方向不变,驱动由「{frm}」{_nat(frm)}转为「{to}」{_nat(to)}。{q}"
+        shifts.append(ShiftItem(node_id=s["node_id"], name=name, from_driver=frm,
+                                to_driver=to, at=s["at"], is_reversal=reversal, implication=impl))
 
     contested_items = []
     for node in graph_repo.list_nodes():
@@ -138,8 +167,12 @@ def build_shifts_view(graph_repo) -> ShiftsView:
                 and (incoming[0].weight - incoming[1].weight) < DEFAULT_CONTESTED_GAP and incoming[0].weight > 0):
             leader, runner = incoming[0], incoming[1]
             reversal = leader.sign != runner.sign
-            impl = (f"异号:若「{runner.driver_label}」反超,{node.name} 方向倾向或反转"
-                    if reversal else f"同向:方向不变,驱动从「{leader.driver_label}」转向「{runner.driver_label}」")
+            ld, rn = leader.driver_label, runner.driver_label
+            if reversal:
+                impl = f"异号:若「{rn}」{_nat(rn)}反超「{ld}」{_nat(ld)},{node.name} 方向倾向或反转"
+            else:
+                impl = f"同向:{_quality_phrase(ld, rn, nature)}" if _quality_phrase(ld, rn, nature) \
+                    else f"同向:方向不变,驱动从「{ld}」转向「{rn}」"
             contested_items.append(ContestedItem(
                 node_id=node.id, name=node.name, leader=leader.driver_label,
                 runner_up=runner.driver_label, gap=round(leader.weight - runner.weight, 3),

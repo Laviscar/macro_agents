@@ -83,3 +83,23 @@ def test_allocation_overview_clusters_by_regime(tmp_path):
     assert a.available
     regimes = {c.regime for c in a.clusters}
     assert {"risk-off", "risk-on"} <= regimes
+
+
+def test_same_sign_switch_shows_quality_verdict(tmp_path):
+    from schemas.graph_edge import EdgeEvidenceRef
+    repo = _repo(tmp_path)
+    # SMH: AI资本开支(结构性,+) vs 风险偏好(情绪事件,+) — same sign, structural->sentiment = quality down
+    for drv in ("AI资本开支", "风险偏好"):
+        e = next(x for x in repo.incoming_edges("SMH") if x.driver_label == drv)
+        e.supporting_evidence = [EdgeEvidenceRef(evidence_id=f"{drv}1", created_at=NOW.isoformat(), contribution=0.5)]
+        e.weight = 0.5
+        repo.save_edge(e)
+    c = next(x for x in build_shifts_view(repo).contested if x.node_id == "SMH")
+    assert c.is_reversal is False
+    assert "支撑质量" in c.implication and ("结构性" in c.implication or "情绪事件" in c.implication)
+
+
+def test_factor_nature_loaded(tmp_path):
+    repo = _repo(tmp_path)
+    nat = repo.factor_nature()
+    assert nat.get("AI资本开支") == "结构性" and nat.get("风险偏好") == "情绪事件"

@@ -70,6 +70,12 @@ class GraphRepository:
             )
             self.save_edge(edge)
 
+    def factor_nature(self) -> dict[str, str]:
+        """driver_label -> 性质(结构性/周期性/情绪事件),from config. Empty if unset."""
+        path = self.config_dir / "driver_vocabulary.yaml"
+        doc = yaml.safe_load(path.read_text(encoding="utf-8")) if path.exists() else {}
+        return (doc or {}).get("factor_nature", {}) or {}
+
     def append_approved_edge(self, edge: GraphEdge) -> None:
         """Persist a promoted candidate to config/approved_edges.yaml so it survives re-seed."""
         path = self.config_dir / "approved_edges.yaml"
