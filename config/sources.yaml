@@ -10,19 +10,19 @@ service:
 sources:
   - type: rss
     name: fed_rss
-    enabled: false
+    enabled: true
     poll_interval_seconds: 300
     url: https://www.federalreserve.gov/feeds/press_all.xml
 
   - type: rss
     name: bls_latest_rss
-    enabled: false
+    enabled: true
     poll_interval_seconds: 900
     url: https://www.bls.gov/feed/bls_latest.rss
 
   - type: rss
     name: bis_press_rss
-    enabled: false
+    enabled: true
     poll_interval_seconds: 900
     url: https://www.bis.org/doclist/all_pressrels.rss
 

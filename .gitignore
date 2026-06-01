@@ -13,3 +13,6 @@ storage/**/*.json
 storage/**/.DS_Store
 
 .idea/
+
+# Claude Code project dir
+.claude/
