@@ -47,12 +47,15 @@ sources:
     assert config.enabled_sources() == [config.sources[0]]
 
 
-def test_default_sources_config_enables_only_finnhub_general() -> None:
+def test_default_sources_config_enabled_set() -> None:
     config = load_news_service_config(Path("config/sources.yaml"))
 
-    enabled_sources = config.enabled_sources()
+    enabled = {source.name for source in config.enabled_sources()}
 
-    assert [source.name for source in enabled_sources] == ["finnhub_general"]
+    # finnhub_general + the free official macro RSS feeds (no API key needed)
+    assert enabled == {"finnhub_general", "fed_rss", "bls_latest_rss", "bis_press_rss"}
+    # symbol-specific finnhub stays off by default
+    assert "finnhub_symbols" not in enabled
 
 
 def test_default_sources_config_includes_trusted_source_catalog() -> None:
