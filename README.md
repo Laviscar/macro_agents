@@ -12,6 +12,8 @@
 | **V1.2** | SQLite + RSS/Finnhub 抓取 + DB consumer + Streamlit UI + Ingestion QA |
 | **V1.3** | **Harness**：Loop 状态机 / PolicyEngine 风险门控 / BudgetGuard 预算 / ToolRuntime / SessionStore（事件可回放）/ Compaction / Eval 回放（`harness/`，设计见 `docs/V1_3_HARNESS_ARCHITECTURE.md`） |
 | **V1.4** | **LLM 集成 + 持续运行**：provider 无关 LLM 层（`llm/`，OpenAI 兼容 / Claude / MiniMax）；AnalystAgent + NarrativeManager 改为 **LLM 优先 + 规则兜底**；**三层独立配置的 LLM**（triage 便宜筛选 / analysis 分析 / narrative 叙事）；常驻 **`run_loop.py`**（抓取→筛选→分析→60min 整合）+ Streamlit「⚡立即跑全链路」按钮；token 预算 enforcement，`.env` 配置 |
+| **V1.5** | **叙事审计员 AuditPanel**：0–3 个可配置审计席位（各自独立 key）批判叙事管理员判断；cross（交叉验证）/ p2p（点对点）两种讨论模式 |
+| **V1.6** | **叙事驱动图（世界树）**：单主线+累加强度 → **资产/驱动有向图**。节点=资产(41)+因子(受控词表),边="谁驱动谁"(结构性符号 + 证据衰减权重)。最强入边=主导驱动,变了=**驱动切换**(自动预警,区分🔁方向反转/🔀同向换驱动)。强度去累加(14天半衰期),0证据不建边,主题节点21天无证据休眠。UI:今日叙事 top-N + 配置立场速览 / 世界树 graphviz 图 / 分歧预警 / 系统页候选边人工确认。设计见 `docs/superpowers/specs/2026-06-01-v1.6-narrative-graph-design.md` |
 
 > **不配 API key 时，全系统自动退回 V1.3 规则版**，行为与纯规则一致。
 >

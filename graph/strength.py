@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import math
+import os
 from datetime import datetime
 
 from schemas.graph_edge import EdgeEvidenceRef, GraphEdge
@@ -8,23 +9,36 @@ from schemas.graph_edge import EdgeEvidenceRef, GraphEdge
 DEFAULT_HALF_LIFE_DAYS = 14.0
 
 
+def _half_life(half_life_days: float | None) -> float:
+    """Explicit value wins; else NARRATIVE_HALF_LIFE_DAYS env; else default. Read lazily
+    (at call time) so .env loaded after import is still honored."""
+    if half_life_days is not None:
+        return half_life_days
+    try:
+        return float(os.environ.get("NARRATIVE_HALF_LIFE_DAYS") or DEFAULT_HALF_LIFE_DAYS)
+    except ValueError:
+        return DEFAULT_HALF_LIFE_DAYS
+
+
 def _parse(ts: str) -> datetime:
     return datetime.fromisoformat(ts.replace("Z", "+00:00"))
 
 
-def decayed_contribution(ref: EdgeEvidenceRef, now: datetime, half_life_days: float = DEFAULT_HALF_LIFE_DAYS) -> float:
+def decayed_contribution(ref: EdgeEvidenceRef, now: datetime, half_life_days: float | None = None) -> float:
     """Evidence contribution decayed by age: contrib * 0.5 ** (age_days / half_life)."""
+    hl = _half_life(half_life_days)
     age_days = max(0.0, (now - _parse(ref.created_at)).total_seconds() / 86400.0)
-    return ref.contribution * (0.5 ** (age_days / half_life_days))
+    return ref.contribution * (0.5 ** (age_days / hl))
 
 
-def compute_edge_weight(edge: GraphEdge, now: datetime, half_life_days: float = DEFAULT_HALF_LIFE_DAYS) -> float:
+def compute_edge_weight(edge: GraphEdge, now: datetime, half_life_days: float | None = None) -> float:
     """Edge weight from decayed evidence, squashed to [0,1) — replaces additive accumulation.
 
     weight = 1 - exp(-Σ decayed_contributions). More fresh evidence -> stronger,
     but bounded; old evidence fades automatically.
     """
-    total = sum(decayed_contribution(ref, now, half_life_days) for ref in edge.supporting_evidence)
+    hl = _half_life(half_life_days)
+    total = sum(decayed_contribution(ref, now, hl) for ref in edge.supporting_evidence)
     return 1.0 - math.exp(-total)
 
 

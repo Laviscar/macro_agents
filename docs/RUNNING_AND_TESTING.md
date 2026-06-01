@@ -152,12 +152,12 @@ python -m harness.eval_cli --window-days 30 --format json  # JSON
 ```bash
 streamlit run streamlit_app.py        # http://localhost:8501
 ```
-4 个产品页面:
-- **今日叙事**:一句话读数 + 强度/置信 + 走势 + 最近变化 + Top2 分歧
-- **叙事**:演变时间线(强度/置信双线 + 关键节点)+ 当前主线
-- **分歧预警**:挑战分支(按概率)+ 预警 + 情景 A/B
+5 个产品页面(v1.6 叙事驱动图):
+- **今日叙事**:从所有资产排出 top-N(切换 > 逼近 > 证据 > 方向性);每张卡分「📖当前(LLM读数)」/「⚠️挑战(逼近的驱动)」;底部**资产配置速览**(按 regime 聚类的偏多/偏空,确定性推导)
+- **世界树**:节点(资产/因子,按层分色)+ 边(谁驱动谁,绿+红−,粗细=权重,加粗=主导)的 graphviz 图;可按层过滤 / 聚焦某资产看入边 + 驱动性质 + 切换史
+- **分歧预警**:已切换 + 逼近切换;每条标 🔁方向反转 / 🔀同向换驱动 + 支撑质量↑↓ 含义
 - **新闻工作台**:逐条新闻 + analysis/evidence 明细
-- **系统**(子页:运行健康 / 抓取自检)——含 **⚡立即跑全链路 (Run Now)** 按钮(见 §3.7)
+- **系统**(子页:运行健康 / 抓取自检)——含 **候选边人工确认面板** + **⚡立即跑全链路 (Run Now)** 按钮(见 §3.7)
 
 > ⚠️ 改了代码或 `.env` 后要**重启 Streamlit**才生效(没装 watchdog 不自动重载;`pip install watchdog` 可自动重载)。
 
@@ -174,6 +174,37 @@ python run_loop.py --once     # 各阶段各跑一次后退出(手动/调试)
 
 ### 3.7 ⚡ Run Now 按钮(系统页)——突发新闻时手动跑一轮
 点「立即跑全链路」:**只处理最近 15 分钟、最新优先**的新闻(避免啃旧积压),小批量,**逐阶段实时显示进度**(① 抓取 ② 筛选 ③ 分析 ④ 整合)。适合你判断有 breaking news 时立刻看 LLM 分析 + 叙事更新。窗口可配 `RUN_NOW_WINDOW_MINUTES`(默认 15)。
+
+> ⚠️ triage/analysis 走 15 分钟窗,**整合(consolidation)不走窗**——它按 watermark 处理"自上轮以来"的证据,每轮上限 `CONSOLIDATE_MAX_EVIDENCE`(默认 50)。所以想让世界树从**历史积压证据**长出来,用 §4 的方式跑整合,而不是只点 Run Now(积压新闻早过了 15 分钟窗,triage 会是 0)。
+
+---
+
+## 4. v1.6 叙事驱动图(世界树)
+
+### 4.1 数据模型
+- **节点**:资产(41,`config/narrative_assets.yaml`,三层 anchor/asset_class/theme)+ 因子(受控词表 `config/driver_vocabulary.yaml`,如实际利率/央行购金/AI资本开支)。
+- **边**:`src --(sign, driver_label)--> dst`(dst 恒为资产)。`sign` 结构性(人管),`weight` 动态(证据衰减自动算)。种子边在 `config/transmission_seed.yaml`;LLM 提名、你在系统页批准的边写入 `config/approved_edges.yaml`。
+- **驱动切换**:某资产最强入边身份变化 → 写 `storage/driver_shifts/`(=分歧预警)。区分方向反转(异号)/ 同向换驱动(同号,看 `factor_nature` 的支撑质量)。
+- 落盘:`storage/graph_nodes/ graph_edges/ candidate_edges/ driver_shifts/`;整合 watermark 在 `storage/run_state.json`。
+
+### 4.2 怎么把图喂活(从证据长出主导驱动)
+整合阶段:路由(便宜 flash LLM 选相关资产)→ 归因到驱动边 / 提名候选边 → 重算强度+主导 → 检测切换 → 写读数。跑法:
+```bash
+python run_loop.py --once     # 含 consolidation 一轮(处理至多 CONSOLIDATE_MAX_EVIDENCE 条积压证据)
+```
+跑完刷新 Streamlit,世界树/今日叙事/分歧预警就有真实数据。积压多时多跑几次(每次消化一块,watermark 自动推进)。
+
+### 4.3 调参(`.env`,都有默认,省略即用默认)
+```
+CONSOLIDATE_MAX_EVIDENCE=50      # 每轮整合证据上限(预算闸门)
+NARRATIVE_HALF_LIFE_DAYS=14      # 证据权重半衰期(天)
+DRIVER_MIN_DOMINANT_WEIGHT=0.15  # 低于此值=无主导驱动
+DRIVER_CONTESTED_GAP=0.10        # 次强-最强差距 < 此值 = 逼近切换
+THEME_DORMANT_DAYS=21            # 主题节点无证据休眠天数(常驻节点永不休眠)
+```
+
+### 4.4 给未来 fancy 前端的 JSON 契约
+`presenters.graph_presenter.export_graph_json(graph_repo, path)` 导出纯 `{nodes, edges}` JSON;Streamlit 用 graphviz 渲染,将来换 Cytoscape/D3 只换渲染层、喂同一份 JSON。
 
 ---
 

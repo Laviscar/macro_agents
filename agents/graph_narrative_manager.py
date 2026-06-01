@@ -179,8 +179,15 @@ class GraphNarrativeManager:
         return node
 
     # ---- Task 17: theme-node dormancy ----
-    def apply_dormancy(self, repo, now, dormant_days: int = 21) -> None:
+    def apply_dormancy(self, repo, now, dormant_days: int | None = None) -> None:
+        import os
         from datetime import datetime
+
+        if dormant_days is None:
+            try:
+                dormant_days = int(os.environ.get("THEME_DORMANT_DAYS") or 21)
+            except ValueError:
+                dormant_days = 21
 
         def _parse(ts: str) -> datetime:
             return datetime.fromisoformat(ts.replace("Z", "+00:00"))
