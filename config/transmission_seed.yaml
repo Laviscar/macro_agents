@@ -8,7 +8,7 @@ edges:
   - {src: 财政赤字供给, dst: US10Y,  sign: 1,  driver_label: 财政赤字供给, init_weight: 0.3}
   - {src: 实际利率,   dst: NDX,     sign: -1, driver_label: 实际利率,     init_weight: 0.4}
   - {src: 实际利率,   dst: BTC,     sign: -1, driver_label: 实际利率,     init_weight: 0.3}
-  - {src: US10Y,      dst: NDX,     sign: -1, driver_label: 实际利率,     init_weight: 0.4}
+  # US10Y -> NDX 删除:与 实际利率->NDX 同 driver_label,会重复计数(实际利率内生于 US10Y-通胀预期,留 v1.7 传导)
   - {src: US10Y,      dst: RUT,     sign: -1, driver_label: 实际利率,     init_weight: 0.4}
   - {src: US10Y,      dst: STAR50,  sign: -1, driver_label: 实际利率,     init_weight: 0.3}
   - {src: US10Y,      dst: HSTECH,  sign: -1, driver_label: 实际利率,     init_weight: 0.3}
@@ -26,8 +26,10 @@ edges:
   - {src: DXY,        dst: COPPER,  sign: -1, driver_label: 美元流动性,   init_weight: 0.3}
   - {src: DXY,        dst: MSCI_EM, sign: -1, driver_label: 美元流动性,   init_weight: 0.3}
   - {src: DXY,        dst: USDCNH,  sign: 1,  driver_label: 美元流动性,   init_weight: 0.4}
-  - {src: USDCNH,     dst: CSI300,  sign: -1, driver_label: 中国增长政策, init_weight: 0.3}
-  - {src: USDCNH,     dst: HSTECH,  sign: -1, driver_label: 中国增长政策, init_weight: 0.3}
+  - {src: 中国增长政策, dst: USDCNH, sign: -1, driver_label: 中国增长政策, init_weight: 0.3}  # 政策支持->CNH 走强->USDCNH 下
+  # USDCNH->CSI300/HSTECH 改标为"美元流动性"(外资/FX 渠道),与直连的 中国增长政策 边区分,避免重复计数
+  - {src: USDCNH,     dst: CSI300,  sign: -1, driver_label: 美元流动性,   init_weight: 0.3}
+  - {src: USDCNH,     dst: HSTECH,  sign: -1, driver_label: 美元流动性,   init_weight: 0.3}
 
   # ---- 风险偏好/波动率 ----
   - {src: 风险偏好,   dst: SPX,     sign: 1,  driver_label: 风险偏好,     init_weight: 0.4}
@@ -56,5 +58,6 @@ edges:
   - {src: AI资本开支, dst: CEG,     sign: 1,  driver_label: AI资本开支,   init_weight: 0.4}
   - {src: AI资本开支, dst: VST,     sign: 1,  driver_label: AI资本开支,   init_weight: 0.4}
   - {src: AI资本开支, dst: COPPER,  sign: 1,  driver_label: AI资本开支,   init_weight: 0.2}
-  - {src: NDX,        dst: NVDA,    sign: 1,  driver_label: 风险偏好,     init_weight: 0.3}
+  # NDX->NVDA(asset→asset)改为 风险偏好 直连,避免隐含传导(传导留 v1.7)
+  - {src: 风险偏好,   dst: NVDA,    sign: 1,  driver_label: 风险偏好,     init_weight: 0.3}
   - {src: WTI,        dst: XLE,     sign: 1,  driver_label: 能源供给,     init_weight: 0.4}

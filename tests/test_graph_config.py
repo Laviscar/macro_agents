@@ -37,6 +37,17 @@ def test_seed_edges_reference_known_nodes_and_vocab():
         assert 0.0 <= e["init_weight"] <= 1.0
 
 
+def test_no_duplicate_driver_into_same_node():
+    # 同一资产不应有两条相同 driver_label 的入边,否则该驱动被重复计数
+    edges = _load("transmission_seed.yaml")["edges"]
+    seen = {}
+    for e in edges:
+        key = (e["dst"], e["driver_label"])
+        seen.setdefault(key, []).append(e["src"])
+    dups = {k: v for k, v in seen.items() if len(v) > 1}
+    assert not dups, f"duplicate (dst, driver) edges: {dups}"
+
+
 def test_gold_has_competing_drivers():
     edges = _load("transmission_seed.yaml")["edges"]
     gold_drivers = {e["driver_label"] for e in edges if e["dst"] == "GOLD"}
