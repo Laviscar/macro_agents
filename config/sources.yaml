@@ -48,6 +48,27 @@ sources:
     limit: 20
 
   - type: finnhub
+    name: finnhub_crypto
+    enabled: true               # 加密新闻(笼统类目,以 BTC 为主),限量 12 喂 BTC 节点
+    poll_interval_seconds: 600
+    endpoint: https://finnhub.io/api/v1/news
+    api_key_env: FINNHUB_API_KEY
+    category: crypto
+    limit: 12
+
+  - type: finnhub_econ_calendar
+    name: finnhub_econ_calendar
+    enabled: true               # 经济日历(CPI/FOMC/非农…),只取 high-impact,量小信号高
+    poll_interval_seconds: 3600
+    endpoint: https://finnhub.io/api/v1/calendar/economic
+    api_key_env: FINNHUB_API_KEY
+    lookback_days: 2
+    params:
+      min_impact: high
+      lookahead_days: 7
+      countries: [US, EU, CN, JP, GB]
+
+  - type: finnhub
     name: finnhub_symbols
     enabled: false
     poll_interval_seconds: 180
