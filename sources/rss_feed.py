@@ -52,6 +52,8 @@ class RssFeedAdapter:
             return self._parse_rss(root)
         if self._local_name(root.tag) == "feed":
             return self._parse_atom(root)
+        if self._local_name(root.tag) == "RDF":   # RSS 1.0 / RDF (e.g. BIS)
+            return self._parse_rdf(root)
         raise ValueError("Unsupported feed format.")
 
     def _parse_rss(self, root: ET.Element) -> list:
@@ -62,6 +64,34 @@ class RssFeedAdapter:
             summary = self._child_text(entry, "description")
             external_id = self._child_text(entry, "guid") or url or title
             published_at = self._normalize_published_at(self._child_text(entry, "pubDate"))
+            items.append(
+                build_raw_news_item(
+                    source_type="rss",
+                    source_name=self.source_name,
+                    external_id=external_id,
+                    url=url,
+                    title=title,
+                    summary=summary,
+                    published_at=published_at,
+                )
+            )
+        return items
+
+    def _parse_rdf(self, root: ET.Element) -> list:
+        """RSS 1.0 / RDF: <item> elements are direct children of <rdf:RDF>,
+        dates come via Dublin Core <dc:date>."""
+        rdf_about = "{http://www.w3.org/1999/02/22-rdf-syntax-ns#}about"
+        items: list = []
+        for entry in root:
+            if self._local_name(entry.tag) != "item":
+                continue
+            title = self._child_text(entry, "title")
+            url = self._child_text(entry, "link")
+            summary = self._child_text(entry, "description")
+            external_id = entry.attrib.get(rdf_about) or url or title
+            published_at = self._normalize_published_at(
+                self._child_text(entry, "date") or self._child_text(entry, "pubDate")
+            )
             items.append(
                 build_raw_news_item(
                     source_type="rss",

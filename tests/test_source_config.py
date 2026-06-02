@@ -53,9 +53,9 @@ def test_default_sources_config_enabled_set() -> None:
     enabled = {source.name for source in config.enabled_sources()}
 
     # finnhub_general + the RSS feeds that actually work programmatically (no API key)
-    assert enabled == {"finnhub_general", "fed_rss", "ecb_blog", "nyt_economy"}
-    # blocked / unsupported-format feeds and symbol-specific finnhub stay off
-    assert {"bls_latest_rss", "bis_press_rss", "finnhub_symbols"}.isdisjoint(enabled)
+    assert enabled == {"finnhub_general", "fed_rss", "ecb_blog", "nyt_economy", "bis_press_rss"}
+    # bls (403-blocks programmatic access) and symbol-specific finnhub stay off
+    assert {"bls_latest_rss", "finnhub_symbols"}.isdisjoint(enabled)
 
 
 def test_default_sources_config_includes_trusted_source_catalog() -> None:

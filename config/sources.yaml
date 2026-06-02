@@ -34,7 +34,7 @@ sources:
 
   - type: rss
     name: bis_press_rss
-    enabled: false              # BIS 是 RSS 1.0/RDF 格式,当前解析器只支持 RSS2.0/Atom,先关
+    enabled: true               # BIS 新闻稿(RSS 1.0/RDF,解析器已支持),免 key
     poll_interval_seconds: 900
     url: https://www.bis.org/doclist/all_pressrels.rss
 
