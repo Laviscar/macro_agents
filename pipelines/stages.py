@@ -103,6 +103,21 @@ def _parse_iso(ts: str) -> datetime:
     return datetime.fromisoformat(ts.replace("Z", "+00:00"))
 
 
+def _evaluate_committee(committee_repo, graph_repo, trigger_levels, velocity_delta: float) -> int:
+    """Flag committee pending convocations from the current graph (no LLM). Runs every
+    consolidation cycle — even when there is no new evidence — since contested conditions
+    persist. Returns the number of pendings created this cycle."""
+    if committee_repo is None:
+        return 0
+    from committee.trigger import evaluate_assets
+    tstate = committee_repo.load_trigger_state()
+    pendings = evaluate_assets(graph_repo, tstate, trigger_levels or [0.60, 0.75, 0.90], velocity_delta)
+    committee_repo.save_trigger_state(tstate)
+    for p in pendings:
+        committee_repo.save_pending(p)
+    return len(pendings)
+
+
 def consolidate_graph(
     repository: SQLiteNewsRepository,
     graph_repo,
@@ -130,8 +145,11 @@ def consolidate_graph(
     watermark = state_doc.get("last_consolidation_at", "")
     evidence_list = repository.get_evidence_since(watermark)  # ascending by created_at
     if not evidence_list:
-        return {"consolidated_evidence": 0, "shifts": 0, "touched": 0,
-                "route_errors": 0, "unrouted": 0, "candidates": 0, "remaining": 0}
+        # No new evidence to consolidate, but the committee trigger must STILL evaluate
+        # the current graph (contested conditions persist across cycles).
+        pending = _evaluate_committee(committee_repo, graph_repo, trigger_levels, velocity_delta)
+        return {"consolidated_evidence": 0, "shifts": 0, "touched": 0, "route_errors": 0,
+                "unrouted": 0, "candidates": 0, "remaining": 0, "committee_pending": pending}
 
     batch = evidence_list[:max_evidence]
     now_dt = _parse_iso(now_fn())
@@ -177,17 +195,8 @@ def consolidate_graph(
 
     graph_manager.apply_dormancy(graph_repo, now_dt)
 
-    # v1.7: after the graph is updated, evaluate committee triggers (proximity + velocity).
-    # Only flags pending convocations — never runs the committee LLM (that is human-gated).
-    pending_count = 0
-    if committee_repo is not None:
-        from committee.trigger import evaluate_assets
-        tstate = committee_repo.load_trigger_state()
-        pendings = evaluate_assets(graph_repo, tstate, trigger_levels or [0.60, 0.75, 0.90], velocity_delta)
-        committee_repo.save_trigger_state(tstate)
-        for p in pendings:
-            committee_repo.save_pending(p)
-        pending_count = len(pendings)
+    # v1.7: evaluate committee triggers on the updated graph (flag-only, no LLM, human-gated convening).
+    pending_count = _evaluate_committee(committee_repo, graph_repo, trigger_levels, velocity_delta)
 
     # advance watermark only to the last processed item, so the rest is picked up next run
     state_doc["last_consolidation_at"] = batch[-1].created_at
