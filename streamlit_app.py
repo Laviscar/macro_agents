@@ -261,7 +261,8 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
                 seat["persona"] = st.selectbox("人格", view.personas,
                     index=view.personas.index(seat["persona"]) if seat.get("persona") in view.personas else 0, key=f"cm_per_{i}")
                 seat["expertise"] = [x.strip() for x in st.text_input("专长(逗号分隔)", ",".join(seat.get("expertise", [])), key=f"cm_exp_{i}").split(",") if x.strip()]
-                tiers = ["auditor_1", "auditor_2", "auditor_3", "analysis", "narrative", "triage"]
+                tiers = ["triage", "analysis", "narrative",
+                         "auditor_1", "auditor_2", "auditor_3", "auditor_4", "auditor_5"]
                 seat["llm_tier"] = st.selectbox("LLM tier", tiers,
                     index=tiers.index(seat["llm_tier"]) if seat.get("llm_tier") in tiers else 0, key=f"cm_tier_{i}")
                 seat["skills"] = st.multiselect("skills", skill_ids, default=[s for s in seat.get("skills", []) if s in skill_ids],
@@ -304,6 +305,9 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
                         try:
                             seat_objs = [CommitteeSeat(**s) for s in seats]
                             pairs = [(so, build_llm_client(load_llm_config(tier=so.llm_tier))) for so in seat_objs]
+                            missing = [so.name for so, cl in pairs if cl is None]
+                            if missing:
+                                st.warning(f"以下席位的 LLM tier 没配 key,已跳过:{', '.join(missing)}（去 .env 填 LLM_<TIER>_API_KEY,或把席位改到已配置的 tier 如 triage/narrative)")
                             chair = build_llm_client(load_llm_config(tier="narrative"))
                             cm = NarrativeCommittee(seats=pairs, chair_client=chair, rounds=rounds,
                                                     mode=st.session_state["committee_mode"], skill_desc=skill_desc)

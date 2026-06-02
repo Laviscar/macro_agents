@@ -33,6 +33,9 @@ class SeatRunner:
         )
 
     def critique(self, context: str, peers: list[str] | None, round_no: int) -> SeatRemark | None:
+        if self.client is None:        # seat's LLM tier has no API key configured -> skip gracefully
+            self._logger.warning("committee seat %s has no LLM client (unconfigured tier); skipped", self.seat.name)
+            return None
         peer_block = ""
         if peers:
             peer_block = "\n\n其他委员上轮观点:\n" + "\n".join(f"- {p}" for p in peers)
@@ -64,6 +67,8 @@ class ChairSynthesizer:
         self._logger = logger or get_logger("macro_agents.committee")
 
     def synthesize(self, context: str, remarks_text: str) -> CommitteeVerdict:
+        if self.client is None:
+            return self._stub("(主席 LLM 未配置 key,无法综合)")
         user = f"背景:\n{context}\n\n委员发言:\n{remarks_text}\n\n请综合成备忘录 JSON。"
         try:
             resp = self.client.complete(
@@ -73,10 +78,14 @@ class ChairSynthesizer:
             return CommitteeVerdict(**_parse_json(resp.text))
         except (LLMError, ValueError, KeyError, TypeError) as exc:
             self._logger.warning("committee chair synthesis failed: %s", exc)
-            return CommitteeVerdict(
-                bottom_line="(主席综合失败,无法得出结论)", whats_changing="", switch_likelihood="不确定",
-                direction="中性", conviction="低", confidence=0.0, time_horizon="—", catalysts_to_watch=[],
-                invalidation="—", positioning="—", key_disagreements=[], evidence_basis=[])
+            return self._stub("(主席综合失败,无法得出结论)")
+
+    @staticmethod
+    def _stub(msg: str) -> CommitteeVerdict:
+        return CommitteeVerdict(
+            bottom_line=msg, whats_changing="", switch_likelihood="不确定", direction="中性",
+            conviction="低", confidence=0.0, time_horizon="—", catalysts_to_watch=[],
+            invalidation="—", positioning="—", key_disagreements=[], evidence_basis=[])
 
 
 class NarrativeCommittee:

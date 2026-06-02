@@ -53,3 +53,14 @@ def test_convene_runs_seats_then_chair():
     session = cm.convene(pending=pend, context="GOLD 当前偏多;实际利率 vs 央行购金")
     assert session.asset_id == "GOLD" and len(session.remarks) == 2
     assert session.verdict.switch_likelihood == "将至" and session.verdict.key_disagreements == ["逆向派认为已price-in"]
+
+
+def test_seat_with_no_client_skipped():
+    from schemas.committee import CommitteeSeat
+    runner = SeatRunner(CommitteeSeat(name="x", persona="鹰派"), client=None, skill_desc={})
+    assert runner.critique(context="c", peers=None, round_no=1) is None
+
+
+def test_chair_with_no_client_returns_stub():
+    v = ChairSynthesizer(client=None).synthesize(context="c", remarks_text="r")
+    assert v.switch_likelihood == "不确定" and v.confidence == 0.0
