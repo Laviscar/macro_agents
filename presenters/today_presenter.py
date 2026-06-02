@@ -137,11 +137,19 @@ def _sign_of(edges, driver_label) -> int | None:
 def build_shifts_view(graph_repo) -> ShiftsView:
     """分歧预警视图:已切换(driver_shifts) + 正在逼近切换(contested),含方向反转判定与含义。"""
     graph_repo.seed_if_empty()
-    name_by_id = {n.id: n.name for n in graph_repo.list_nodes()}
+    nodes = {n.id: n for n in graph_repo.list_nodes()}
+    name_by_id = {nid: n.name for nid, n in nodes.items()}
     nature = graph_repo.factor_nature()
 
     def _nat(d):  # "结构性" -> "(结构性)" else ""
         return f"({nature[d]})" if d in nature else ""
+
+    def _dir(sign):  # 边符号 -> 利多/利空
+        return "利多" if (sign or 0) > 0 else ("利空" if sign is not None else "")
+
+    def _lean_of(node_id):
+        n = nodes.get(node_id)
+        return _lean(n.strength) if n is not None else "中性"
 
     shifts = []
     for s in sorted(graph_repo.list_driver_shifts(), key=lambda s: s.get("at", ""), reverse=True):
@@ -156,7 +164,8 @@ def build_shifts_view(graph_repo) -> ShiftsView:
             q = _quality_phrase(frm, to, nature)
             impl = f"同向换驱动:方向不变,驱动由「{frm}」{_nat(frm)}转为「{to}」{_nat(to)}。{q}"
         shifts.append(ShiftItem(node_id=s["node_id"], name=name, from_driver=frm,
-                                to_driver=to, at=s["at"], is_reversal=reversal, implication=impl))
+                                to_driver=to, at=s["at"], is_reversal=reversal, implication=impl,
+                                current_lean=_lean_of(s["node_id"]), from_dir=_dir(fs), to_dir=_dir(ts)))
 
     contested_items = []
     for node in graph_repo.list_nodes():
@@ -176,6 +185,7 @@ def build_shifts_view(graph_repo) -> ShiftsView:
             contested_items.append(ContestedItem(
                 node_id=node.id, name=node.name, leader=leader.driver_label,
                 runner_up=runner.driver_label, gap=round(leader.weight - runner.weight, 3),
-                is_reversal=reversal, implication=impl))
+                is_reversal=reversal, implication=impl,
+                current_lean=_lean(node.strength), from_dir=_dir(leader.sign), to_dir=_dir(runner.sign)))
     available = bool(shifts or contested_items)
     return ShiftsView(available=available, shifts=shifts, contested=contested_items)

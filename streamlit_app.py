@@ -193,13 +193,21 @@ def _render_shifts_view(st: Any, v: Any) -> None:
         st.caption("当前没有已确认的驱动切换。")
     for s in v.shifts:
         kind = "🔁 方向反转" if s.is_reversal else "🔀 同向换驱动"
-        st.error(f"**{s.name}**：`{s.from_driver}` → `{s.to_driver}`　{kind}　·　`{_format_datetime(s.at)}`\n\n{s.implication}")
+        post = "切换后方向反转" if s.is_reversal else "切换后方向不变"
+        st.error(
+            f"**{s.name}**　当前 **{s.current_lean}**　{kind}　·　`{_format_datetime(s.at)}`\n\n"
+            f"主导驱动：`{s.from_driver}`（{s.from_dir}）→ `{s.to_driver}`（{s.to_dir}）—— {post}\n\n"
+            f"{s.implication}")
     st.markdown("### ⚠️ 逼近切换(竞争驱动)")
     if not v.contested:
         st.caption("当前没有逼近切换的资产。")
     for c in v.contested:
         kind = "🔁 方向反转风险" if c.is_reversal else "🔀 同向换驱动"
-        st.warning(f"**{c.name}**：`{c.leader}` 领先,`{c.runner_up}` 逼近(差 {c.gap})　{kind}\n\n{c.implication}")
+        post = "若切换→方向或反转" if c.is_reversal else "若切换→方向不变"
+        st.warning(
+            f"**{c.name}**　当前 **{c.current_lean}**　{kind}\n\n"
+            f"领先 `{c.leader}`（{c.from_dir}）　逼近 `{c.runner_up}`（{c.to_dir}）　差 {c.gap} —— {post}\n\n"
+            f"{c.implication}")
 
 
 def _render_candidate_panel(st: Any, graph_repo: Any) -> None:

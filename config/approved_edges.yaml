@@ -84,3 +84,33 @@ edges:
   sign: -1
   driver_label: 风险偏好
   init_weight: 0.0
+- src: 信用风险
+  dst: 2Y10Y
+  sign: -1
+  driver_label: 信用风险
+  init_weight: 0.0
+- src: 信用风险
+  dst: MOVE
+  sign: 1
+  driver_label: 信用风险
+  init_weight: 0.0
+- src: 政策利率
+  dst: 2Y10Y
+  sign: -1
+  driver_label: 政策利率
+  init_weight: 0.0
+- src: 政策利率
+  dst: MOVE
+  sign: 1
+  driver_label: 政策利率
+  init_weight: 0.0
+- src: 政策利率
+  dst: US10Y
+  sign: 1
+  driver_label: 政策利率
+  init_weight: 0.0
+- src: 美元流动性
+  dst: US2Y
+  sign: -1
+  driver_label: 美元流动性
+  init_weight: 0.0

@@ -103,3 +103,19 @@ def test_factor_nature_loaded(tmp_path):
     repo = _repo(tmp_path)
     nat = repo.factor_nature()
     assert nat.get("AI资本开支") == "结构性" and nat.get("风险偏好") == "情绪事件"
+
+
+def test_shifts_view_carries_lean_and_direction(tmp_path):
+    from schemas.graph_edge import EdgeEvidenceRef
+    repo = _repo(tmp_path)
+    # make GOLD net-long and contested between 实际利率(-) and 央行购金(+)
+    for drv, w in (("实际利率", 0.45), ("央行购金", 0.5)):
+        e = next(x for x in repo.incoming_edges("GOLD") if x.driver_label == drv)
+        e.supporting_evidence = [EdgeEvidenceRef(evidence_id=f"{drv}", created_at=NOW.isoformat(), contribution=0.6)]
+        e.weight = w
+        repo.save_edge(e)
+    g = repo.get_node("GOLD"); g.strength = 0.7; repo.save_node(g)
+    c = next(x for x in build_shifts_view(repo).contested if x.node_id == "GOLD")
+    assert c.current_lean == "偏多"
+    assert {c.from_dir, c.to_dir} == {"利多", "利空"}   # opposite-sign drivers
+    assert c.is_reversal is True

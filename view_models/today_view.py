@@ -41,6 +41,9 @@ class ShiftItem:
     at: str
     is_reversal: bool = False       # from/to 边异号 = 方向反转(否则同向换驱动)
     implication: str = ""
+    current_lean: str = "中性"      # 资产当前偏多/偏空/中性(← strength)
+    from_dir: str = ""              # 旧主导驱动 利多/利空(← from 边符号)
+    to_dir: str = ""                # 新主导驱动 利多/利空(← to 边符号)
 
 
 @dataclass(slots=True)
@@ -52,6 +55,9 @@ class ContestedItem:
     gap: float
     is_reversal: bool = False
     implication: str = ""
+    current_lean: str = "中性"
+    from_dir: str = ""              # 领先驱动 利多/利空
+    to_dir: str = ""               # 逼近驱动(挑战者) 利多/利空
 
 
 @dataclass(slots=True)
