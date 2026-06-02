@@ -1,0 +1,26 @@
+# 叙事委员会默认席位 + 预设阵容(可在 UI 编辑,写回此文件)
+default_seats:
+  - {name: 鹰派-利率, persona: 鹰派, expertise: [利率], llm_tier: auditor_1, skills: [rates_curve, policy]}
+  - {name: 鸽派-增长, persona: 鸽派, expertise: [增长], llm_tier: auditor_2, skills: [event_gap, liquidity]}
+  - {name: 逆向-求证, persona: 逆向, expertise: [拥挤度], llm_tier: auditor_3, skills: [positioning, verify]}
+default_rounds: 1
+default_mode: cross
+
+templates:
+  - id: hawk_dove
+    name: 鹰鸽对冲
+    rounds: 2
+    mode: cross
+    seats:
+      - {name: 鹰派, persona: 鹰派, expertise: [利率], llm_tier: auditor_1, skills: [rates_curve]}
+      - {name: 鸽派, persona: 鸽派, expertise: [增长], llm_tier: auditor_2, skills: [event_gap]}
+      - {name: 逆向, persona: 逆向, expertise: [拥挤度], llm_tier: auditor_3, skills: [positioning]}
+      - {name: 求证, persona: 数据派, expertise: [数据], llm_tier: auditor_1, skills: [verify]}
+  - id: macro_rates
+    name: 宏观利率组
+    rounds: 1
+    mode: cross
+    seats:
+      - {name: 利率, persona: 结构派, expertise: [利率], llm_tier: auditor_1, skills: [rates_curve, policy]}
+      - {name: 流动性, persona: 鸽派, expertise: [流动性], llm_tier: auditor_2, skills: [liquidity]}
+      - {name: 求证, persona: 数据派, expertise: [数据], llm_tier: auditor_3, skills: [verify]}

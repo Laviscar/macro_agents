@@ -1,0 +1,16 @@
+# 叙事委员会 skill 库 (v0,12 个,描述性——塑造委员视角,v1.7 不执行工具)
+skills:
+  - {id: rates_curve,   name: 利率与曲线,   description: "久期/2s10s/政策路径角度审视"}
+  - {id: fx_carry,      name: 外汇与套利,   description: "美日利差/carry/CNH 压力"}
+  - {id: vol_structure, name: 波动率结构,   description: "VIX/MOVE、期限结构、风险定价"}
+  - {id: liquidity,     name: 流动性追踪,   description: "央行扩缩表/美元流动性"}
+  - {id: correlation,   name: 相关性与传导, description: "切换是否传导到其它资产"}
+  - {id: geopolitics,   name: 地缘风险,     description: "避险/能源/供给冲击"}
+  - {id: policy,        name: 政策解读,     description: "央行措辞、反应函数"}
+  - {id: positioning,   name: 仓位与拥挤度, description: "是否已 price-in、拥挤反转"}
+  - {id: valuation,     name: 估值与均值回归, description: "极端定价、回归压力"}
+  - {id: event_gap,     name: 事件与预期差, description: "CPI/非农 实际 vs 预期"}
+  - {id: analogues,     name: 历史类比,     description: "2013 taper/2018Q4 校准"}
+  - {id: verify,        name: 求证与溯源,   description: "追一手来源、标不可证伪、不编数"}
+
+personas: [鹰派, 鸽派, 逆向, 结构派, 数据派]
