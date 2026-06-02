@@ -137,6 +137,16 @@ def build_run_loop(
     vocab = set(_vocab_doc.get("factors", []))
     regimes = set(_vocab_doc.get("regimes", []))
 
+    # v1.7: committee trigger (flag only; convening is human-gated in the UI).
+    from repositories.committee_repository import CommitteeRepository
+    committee_repo = CommitteeRepository(storage_root=storage_root, config_dir="config")
+    _levels_raw = os.environ.get("COMMITTEE_TRIGGER_LEVELS", "0.60,0.75,0.90")
+    try:
+        trigger_levels = [float(x) for x in _levels_raw.split(",") if x.strip()]
+    except ValueError:
+        trigger_levels = [0.60, 0.75, 0.90]
+    committee_velocity = _interval("COMMITTEE_VELOCITY_DELTA", 0.10)
+
     cfg_path = resolve_news_service_config_path(Path(config_path)).resolve()
     ingest_service = build_polling_service(load_news_service_config(cfg_path), repository)
 
@@ -159,7 +169,9 @@ def build_run_loop(
               lambda: analyze_pending(repository, analyst, **analysis_kwargs)),
         Stage("consolidation", _interval("RUN_LOOP_CONSOLIDATION_SECONDS", 3600),
               lambda: consolidate_graph(repository, graph_repo, graph_manager, vocab, regimes,
-                                        run_state_path, max_evidence=int(_interval("CONSOLIDATE_MAX_EVIDENCE", 50)))),
+                                        run_state_path, max_evidence=int(_interval("CONSOLIDATE_MAX_EVIDENCE", 50)),
+                                        committee_repo=committee_repo, trigger_levels=trigger_levels,
+                                        velocity_delta=committee_velocity)),
     ]
     global _last_narrative_manager
     _last_narrative_manager = graph_manager

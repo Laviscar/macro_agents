@@ -112,6 +112,9 @@ def consolidate_graph(
     run_state_path: str | Path,
     now_fn=now_iso,
     max_evidence: int = 50,
+    committee_repo=None,
+    trigger_levels: list[float] | None = None,
+    velocity_delta: float = 0.10,
 ) -> dict:
     """v1.6 consolidation: route new evidence to assets, attribute to driver edges
     (or propose candidate edges), recompute node strength + dominant driver, persist
@@ -173,9 +176,22 @@ def consolidate_graph(
             graph_repo.save_node(node)
 
     graph_manager.apply_dormancy(graph_repo, now_dt)
+
+    # v1.7: after the graph is updated, evaluate committee triggers (proximity + velocity).
+    # Only flags pending convocations — never runs the committee LLM (that is human-gated).
+    pending_count = 0
+    if committee_repo is not None:
+        from committee.trigger import evaluate_assets
+        tstate = committee_repo.load_trigger_state()
+        pendings = evaluate_assets(graph_repo, tstate, trigger_levels or [0.60, 0.75, 0.90], velocity_delta)
+        committee_repo.save_trigger_state(tstate)
+        for p in pendings:
+            committee_repo.save_pending(p)
+        pending_count = len(pendings)
+
     # advance watermark only to the last processed item, so the rest is picked up next run
     state_doc["last_consolidation_at"] = batch[-1].created_at
     write_json(run_state_path, state_doc)
     return {"consolidated_evidence": len(batch), "shifts": shifts, "touched": len(touched),
             "route_errors": route_errors, "unrouted": unrouted, "candidates": candidates,
-            "remaining": len(evidence_list) - len(batch)}
+            "remaining": len(evidence_list) - len(batch), "committee_pending": pending_count}
