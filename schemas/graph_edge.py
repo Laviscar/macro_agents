@@ -28,6 +28,7 @@ class GraphEdge(BaseModel):
     sign: Literal[1, -1]
     driver_label: str                      # 词表内
     weight: float = Field(default=0.0, ge=0.0, le=1.0)
+    weight_prev: float = Field(default=0.0, ge=0.0, le=1.0)   # 上轮权重,供 velocity 触发算增量
     supporting_evidence: list[EdgeEvidenceRef] = Field(default_factory=list)
     status: EdgeStatus = "active"
     created_at: str = ""

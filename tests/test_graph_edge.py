@@ -17,3 +17,9 @@ def test_roundtrip_with_evidence():
                       EdgeEvidenceRef(evidence_id="ev1", created_at="2026-06-01T00:00:00Z", contribution=0.3)])
     again = GraphEdge.model_validate_json(e.model_dump_json())
     assert again.weight == 0.4 and again.supporting_evidence[0].evidence_id == "ev1"
+
+
+def test_edge_has_weight_prev_default_zero():
+    from schemas.graph_edge import GraphEdge
+    e = GraphEdge(id="a->B", src="a", dst="B", sign=1, driver_label="风险偏好")
+    assert e.weight_prev == 0.0

@@ -142,3 +142,18 @@ def test_propose_edge_rejects_self_loop():
     mgr = GraphNarrativeManager(llm_client=FakeLLMClient(responses=[
         json.dumps({"src": "MOVE", "dst": "MOVE", "sign": 1, "driver_label": "避险地缘"})]))
     assert mgr.propose_edge("x", "MOVE", vocab={"避险地缘"}, existing_edge_ids=set()) is None
+
+
+def test_recompute_stores_weight_prev(tmp_path):
+    from datetime import datetime, timezone
+    from repositories.graph_repository import GraphRepository
+    from schemas.graph_edge import EdgeEvidenceRef
+    repo = GraphRepository(tmp_path, CONFIG); repo.seed_if_empty()
+    mgr = GraphNarrativeManager(llm_client=FakeLLMClient())
+    edge = next(e for e in repo.incoming_edges("GOLD") if e.driver_label == "央行购金")
+    before = edge.weight
+    edge.supporting_evidence.append(EdgeEvidenceRef(evidence_id="e", created_at=datetime(2026,6,1,tzinfo=timezone.utc).isoformat(), contribution=0.5))
+    repo.save_edge(edge)
+    mgr.recompute_node(repo, "GOLD", datetime(2026,6,1,tzinfo=timezone.utc))
+    updated = next(e for e in repo.incoming_edges("GOLD") if e.driver_label == "央行购金")
+    assert updated.weight_prev == before and updated.weight != before

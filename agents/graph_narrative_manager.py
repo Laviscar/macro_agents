@@ -133,6 +133,7 @@ class GraphNarrativeManager:
         # edges with no evidence keep their seed-prior weight until news arrives.
         for edge in edges:
             if edge.supporting_evidence:
+                edge.weight_prev = edge.weight        # snapshot before update, for velocity trigger
                 edge.weight = compute_edge_weight(edge, now)
                 repo.save_edge(edge)
         node = repo.get_node(asset_id)
