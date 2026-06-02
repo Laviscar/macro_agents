@@ -225,7 +225,7 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
     from dataclasses import replace
 
     from agents.committee import NarrativeCommittee
-    from committee.staffing import auto_staff
+    from committee.staffing import auto_staff, random_staff
     from llm.config import load_llm_config
     from llm.factory import build_llm_client
     from schemas.committee import CommitteeSeat
@@ -335,10 +335,17 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
                 rv = "🔁反转" if p.is_reversal else "🔀同向"
                 st.markdown(f"**{p.asset_name}** {tag} {rv}　逼近度 {p.ratio:.0%}　领先 `{p.leader}` ← 逼近 `{p.runner_up}`")
                 seats = st.session_state["committee_seats"]
-                if st.button("🤖 自动组阵", key=f"auto_{p.asset_id}_{p.trigger}_{p.level}"):
+                ac, rc = st.columns(2)
+                if ac.button("🤖 自动组阵(按驱动)", key=f"auto_{p.asset_id}_{p.trigger}_{p.level}"):
                     drivers = [e.driver_label for e in graph_repo.incoming_edges(p.asset_id)]
                     auto = auto_staff(drivers, [s.model_dump() for s in view.skill_library], view.personas, max_seats=5)
                     st.session_state["committee_seats"] = [s.model_dump() for s in auto]
+                    st.rerun()
+                if rc.button("🎲 随机换人(保持席位数)", key=f"rand_{p.asset_id}_{p.trigger}_{p.level}"):
+                    import random as _random
+                    n = len(st.session_state["committee_seats"]) or len(view.default_seats)
+                    rnd = random_staff(n, [s.model_dump() for s in view.skill_library], view.personas, rng=_random.Random())
+                    st.session_state["committee_seats"] = [s.model_dump() for s in rnd]
                     st.rerun()
                 rounds = st.session_state["committee_rounds"]
                 st.caption(f"预估 LLM 调用 ≈ {estimate_calls(len(seats), rounds)} 次(席位 {len(seats)} × 轮次 {rounds} + 主席)")

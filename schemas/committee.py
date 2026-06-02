@@ -11,6 +11,7 @@ class CommitteeSkill(BaseModel):
     id: str
     name: str
     description: str
+    persona: str | None = None              # 自动组阵的天然代言人格
     tools: list[str] = Field(default_factory=list)
 
 
