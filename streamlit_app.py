@@ -236,6 +236,40 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
         cfg = replace(cfg, timeout_seconds=max(cfg.timeout_seconds, 180.0))
         return build_llm_client(cfg)
 
+    def _convene(pending, clear_after: bool) -> None:
+        """用当前 session 配置(席位/轮次/模式)召开一次圆桌并存档。pending/history 共用。"""
+        seats = st.session_state["committee_seats"]
+        with st.status("圆桌讨论中…", expanded=False) as status:
+            try:
+                seat_objs = [CommitteeSeat(**s) for s in seats]
+                pairs = [(so, _committee_client(so.llm_tier)) for so in seat_objs]
+                missing = [so.name for so, cl in pairs if cl is None]
+                if missing:
+                    st.warning(f"以下席位的 LLM tier 没配 key,已跳过:{', '.join(missing)}（去 .env 填 LLM_<TIER>_API_KEY,或把席位改到已配置的 tier 如 triage/narrative)")
+                chair = _committee_client("narrative")
+                cm = NarrativeCommittee(seats=pairs, chair_client=chair, rounds=st.session_state["committee_rounds"],
+                                        mode=st.session_state["committee_mode"], skill_desc=skill_desc)
+                session = cm.convene(pending=pending, context=_committee_context(graph_repo, pending))
+                committee_repo.save_session(session)
+                if clear_after:
+                    committee_repo.clear_pending(pending.asset_id)
+                status.update(label=f"✅ {pending.asset_name} 圆桌完成", state="complete")
+            except Exception as exc:
+                status.update(label=f"❌ {exc}", state="error")
+        st.rerun()
+
+    def _pending_from_graph(asset_id: str, asset_name: str):
+        """从资产当前图状态重建一个 PendingConvocation(供历史区"重新召开"用)。"""
+        from schemas.committee import PendingConvocation
+        edges = sorted(graph_repo.incoming_edges(asset_id), key=lambda e: e.weight, reverse=True)
+        leader = edges[0] if edges else None
+        runner = edges[1] if len(edges) > 1 else None
+        ratio = (runner.weight / leader.weight) if (leader and runner and leader.weight) else 0.0
+        return PendingConvocation(
+            asset_id=asset_id, asset_name=asset_name, trigger="proximity", level=None, ratio=round(ratio, 3),
+            leader=leader.driver_label if leader else "—", runner_up=runner.driver_label if runner else "—",
+            is_reversal=bool(leader and runner and leader.sign != runner.sign), created_at="")
+
     st.subheader("叙事委员会 · Roundtable")
     st.caption("在驱动逼近切换的关键时刻人工召开圆桌:可配置委员人格/专长/LLM/skill;主席综合机构 memo 级结论。不改图,只做咨询。")
     view = build_committee_view(committee_repo)
@@ -309,24 +343,7 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
                 rounds = st.session_state["committee_rounds"]
                 st.caption(f"预估 LLM 调用 ≈ {estimate_calls(len(seats), rounds)} 次(席位 {len(seats)} × 轮次 {rounds} + 主席)")
                 if st.button("🏛 召开圆桌", key=f"conv_{p.asset_id}_{p.trigger}_{p.level}", type="primary"):
-                    with st.status("圆桌讨论中…", expanded=False) as status:
-                        try:
-                            seat_objs = [CommitteeSeat(**s) for s in seats]
-                            pairs = [(so, _committee_client(so.llm_tier)) for so in seat_objs]
-                            missing = [so.name for so, cl in pairs if cl is None]
-                            if missing:
-                                st.warning(f"以下席位的 LLM tier 没配 key,已跳过:{', '.join(missing)}（去 .env 填 LLM_<TIER>_API_KEY,或把席位改到已配置的 tier 如 triage/narrative)")
-                            chair = _committee_client("narrative")
-                            cm = NarrativeCommittee(seats=pairs, chair_client=chair, rounds=rounds,
-                                                    mode=st.session_state["committee_mode"], skill_desc=skill_desc)
-                            ctx = _committee_context(graph_repo, p)
-                            session = cm.convene(pending=p, context=ctx)
-                            committee_repo.save_session(session)
-                            committee_repo.clear_pending(p.asset_id)
-                            status.update(label=f"✅ {p.asset_name} 圆桌完成", state="complete")
-                        except Exception as exc:
-                            status.update(label=f"❌ {exc}", state="error")
-                    st.rerun()
+                    _convene(p, clear_after=True)
 
     with hist_tab:
         if not view.sessions:
@@ -349,6 +366,10 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
                 with st.expander(f"各委员发言({len(sess.remarks)})"):
                     for r in sess.remarks:
                         st.caption(f"[第{r.round}轮] {r.seat_name}({r.persona}):{r.critique}")
+                st.caption(f"用了:{len(sess.seats)} 席 · {sess.rounds} 轮 · {sess.mode} —— "
+                           "想看不同委员会的结论?去「配置席位」改人格/skill/LLM,再点下面重开。")
+                if st.button("🔄 用当前配置重新召开(对比)", key=f"reconv_{sess.id}"):
+                    _convene(_pending_from_graph(sess.asset_id, sess.asset_name), clear_after=False)
 
 
 def _committee_context(graph_repo: Any, pending: Any) -> str:
