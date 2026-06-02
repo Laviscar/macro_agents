@@ -47,7 +47,7 @@ def test_session_and_badge(tmp_path):
 
 def test_load_config_seats_and_skills(tmp_path):
     repo = CommitteeRepository(tmp_path, CONFIG)
-    assert len(repo.skill_library()) == 12
+    assert len(repo.skill_library()) == 13
     assert repo.default_seats() and repo.templates()
     assert "鹰派" in repo.personas()
 

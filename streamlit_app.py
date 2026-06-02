@@ -225,7 +225,8 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
     from dataclasses import replace
 
     from agents.committee import NarrativeCommittee
-    from committee.staffing import auto_staff, random_staff
+    from committee.market_data import fetch_market_snapshot
+    from committee.staffing import random_staff
     from llm.config import load_llm_config
     from llm.factory import build_llm_client
     from schemas.committee import CommitteeSeat
@@ -249,7 +250,10 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
                 chair = _committee_client("narrative")
                 cm = NarrativeCommittee(seats=pairs, chair_client=chair, rounds=st.session_state["committee_rounds"],
                                         mode=st.session_state["committee_mode"], skill_desc=skill_desc)
-                session = cm.convene(pending=pending, context=_committee_context(graph_repo, pending))
+                context = _committee_context(graph_repo, pending)
+                snapshot = fetch_market_snapshot(pending.asset_id)   # 注入二级市场实时量价(数据派用)
+                context += f"\n二级市场量价:{snapshot}" if snapshot else "\n二级市场量价:(无实时数据)"
+                session = cm.convene(pending=pending, context=context)
                 committee_repo.save_session(session)
                 if clear_after:
                     committee_repo.clear_pending(pending.asset_id)
@@ -334,14 +338,9 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
                 tag = f"📊 邻近 {p.level:.0%}" if p.trigger == "proximity" else f"⚡ 加速 +{p.velocity_delta}"
                 rv = "🔁反转" if p.is_reversal else "🔀同向"
                 st.markdown(f"**{p.asset_name}** {tag} {rv}　逼近度 {p.ratio:.0%}　领先 `{p.leader}` ← 逼近 `{p.runner_up}`")
+                st.caption(f"⏱ 触发时间:{_format_datetime(p.created_at)}")
                 seats = st.session_state["committee_seats"]
-                ac, rc = st.columns(2)
-                if ac.button("🤖 自动组阵(按驱动)", key=f"auto_{p.asset_id}_{p.trigger}_{p.level}"):
-                    drivers = [e.driver_label for e in graph_repo.incoming_edges(p.asset_id)]
-                    auto = auto_staff(drivers, [s.model_dump() for s in view.skill_library], view.personas, max_seats=5)
-                    st.session_state["committee_seats"] = [s.model_dump() for s in auto]
-                    st.rerun()
-                if rc.button("🎲 随机换人(保持席位数)", key=f"rand_{p.asset_id}_{p.trigger}_{p.level}"):
+                if st.button("🎲 随机换人(保持席位数)", key=f"rand_{p.asset_id}_{p.trigger}_{p.level}"):
                     import random as _random
                     n = len(st.session_state["committee_seats"]) or len(view.default_seats)
                     rnd = random_staff(n, [s.model_dump() for s in view.skill_library], view.personas, rng=_random.Random())

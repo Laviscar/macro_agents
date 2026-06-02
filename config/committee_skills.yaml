@@ -13,5 +13,6 @@ skills:
   - {id: valuation,     name: 估值与均值回归, persona: 结构派, description: "极端定价、回归压力"}
   - {id: analogues,     name: 历史类比,     persona: 结构派, description: "2013 taper/2018Q4 校准"}
   - {id: verify,        name: 求证与溯源,   persona: 数据派, description: "追一手来源、标不可证伪、不编数"}
+  - {id: market_data,   name: 二级市场量价, persona: 数据派, description: "读现价/涨跌/区间等二级市场实际数据,用真数字校验叙事(召开时会注入实时量价)"}
 
 personas: [鹰派, 鸽派, 逆向, 结构派, 数据派]

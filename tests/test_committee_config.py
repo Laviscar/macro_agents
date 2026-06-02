@@ -8,10 +8,10 @@ def _load(n):
     return yaml.safe_load((CFG / n).read_text(encoding="utf-8"))
 
 
-def test_skill_library_has_12_and_personas():
+def test_skill_library_has_13_and_personas():
     d = _load("committee_skills.yaml")
-    assert len(d["skills"]) == 12
-    assert {"verify", "rates_curve", "event_gap"} <= {s["id"] for s in d["skills"]}
+    assert len(d["skills"]) == 13
+    assert {"verify", "rates_curve", "event_gap", "market_data"} <= {s["id"] for s in d["skills"]}
     assert "鹰派" in d["personas"] and "鸽派" in d["personas"]
     # every skill carries an affinity persona drawn from the persona vocabulary
     personas = set(d["personas"])

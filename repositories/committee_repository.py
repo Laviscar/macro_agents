@@ -37,8 +37,9 @@ class CommitteeRepository:
         (self.pending_dir / f"{key}.json").write_text(p.model_dump_json(), encoding="utf-8")
 
     def list_pending(self) -> list[PendingConvocation]:
-        return [PendingConvocation.model_validate_json(f.read_text(encoding="utf-8"))
-                for f in sorted(self.pending_dir.glob("*.json"))]
+        items = [PendingConvocation.model_validate_json(f.read_text(encoding="utf-8"))
+                 for f in self.pending_dir.glob("*.json")]
+        return sorted(items, key=lambda p: p.created_at, reverse=True)  # newest trigger first
 
     def clear_pending(self, asset_id: str) -> None:
         for f in self.pending_dir.glob("*.json"):

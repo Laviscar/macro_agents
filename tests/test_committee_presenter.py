@@ -14,7 +14,7 @@ def test_view_has_pending_history_config(tmp_path):
                       is_reversal=True, created_at="t"))
     v = build_committee_view(repo)
     assert v.pending and v.pending[0].asset_id == "GOLD"
-    assert len(v.skill_library) == 12 and v.default_seats and v.personas
+    assert len(v.skill_library) == 13 and v.default_seats and v.personas
 
 
 def test_estimate_calls_seats_times_rounds_plus_chair():
