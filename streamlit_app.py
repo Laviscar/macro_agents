@@ -8,7 +8,9 @@ from presenters.data_presenter import build_debug_payload, build_news_detail_vie
 from presenters.graph_presenter import build_graph_view, graph_to_dot, node_shift_history
 from presenters.ingestion_presenter import build_ingestion_qa_overview
 from presenters.operations_presenter import build_operations_overview
+from presenters.committee_presenter import build_committee_view, estimate_calls
 from presenters.today_presenter import build_allocation_overview, build_shifts_view, build_today_view
+from repositories.committee_repository import CommitteeRepository
 from repositories.graph_repository import GraphRepository
 from repositories.news_repository import SQLiteNewsRepository
 from view_models.ingestion_qa import IngestionQAOverview
@@ -48,7 +50,8 @@ def main() -> None:
     db_path = Path(os.environ.get("MACRO_AGENTS_DB_PATH", DEFAULT_DB_PATH))
     repository = SQLiteNewsRepository(db_path)
     graph_repo = GraphRepository(storage_root=STORAGE_ROOT, config_dir=str(APP_ROOT / "config"))
-    today = build_today_view(graph_repo)
+    committee_repo = CommitteeRepository(storage_root=STORAGE_ROOT, config_dir=str(APP_ROOT / "config"))
+    today = build_today_view(graph_repo, committee_repo=committee_repo)
     shifts = build_shifts_view(graph_repo)
     operations = build_operations_overview(repository, STORAGE_ROOT)
     ingestion_qa = build_ingestion_qa_overview(DEFAULT_INGESTION_QA_REPORT)
@@ -59,8 +62,8 @@ def main() -> None:
     st.title("Macro Agents Research Workbench")
     st.caption("叙事驱动图 (v1.6)：每个资产是一条由驱动因子组成的叙事;最强入边=主导驱动,变了=驱动切换。")
 
-    today_tab, tree_tab, shifts_tab, workbench_tab, system_tab = st.tabs(
-        ["今日叙事", "世界树", "分歧预警", "新闻工作台", "系统"]
+    today_tab, tree_tab, shifts_tab, committee_tab, workbench_tab, system_tab = st.tabs(
+        ["今日叙事", "世界树", "分歧预警", "叙事委员会", "新闻工作台", "系统"]
     )
 
     with today_tab:
@@ -72,7 +75,13 @@ def main() -> None:
         _render_world_tree(st, graph_repo)
 
     with shifts_tab:
+        pending_n = len(committee_repo.list_pending())
+        if pending_n:
+            st.info(f"🏛 有 {pending_n} 个待委员会召开 —— 去「叙事委员会」页查看并召开圆桌。")
         _render_shifts_view(st, shifts)
+
+    with committee_tab:
+        _render_committee_view(st, committee_repo, graph_repo, db_path)
 
     with workbench_tab:
         _render_data_view(st, repository, news_items, data_rows)
@@ -118,6 +127,8 @@ def _render_today_view(st: Any, t: Any) -> None:
             head = f"**{c.name}**　{_LEAN_BADGE.get(c.lean, c.lean)}（强度 {round(c.strength*100)}% · 信心 {c.conviction}）"
             if c.is_shifting:
                 head += "　🔀 已切换"
+            if c.committee_badge:
+                head += f"　🏛 {c.committee_badge}"
             st.markdown(head)
             # 当前状态(叙事 LLM 读数) vs 挑战(确定性推导),分行标清
             st.markdown(f"📖 **当前**：主导 `{c.dominant_driver or '—'}`" + (f" — {c.read_line}" if c.read_line else ""))
@@ -208,6 +219,136 @@ def _render_shifts_view(st: Any, v: Any) -> None:
             f"**{c.name}**　当前 **{c.current_lean}**　{kind}\n\n"
             f"领先 `{c.leader}`（{c.from_dir}）　逼近 `{c.runner_up}`（{c.to_dir}）　差 {c.gap} —— {post}\n\n"
             f"{c.implication}")
+
+
+def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_path: Any) -> None:
+    from agents.committee import NarrativeCommittee
+    from committee.staffing import auto_staff
+    from llm.config import load_llm_config
+    from llm.factory import build_llm_client
+    from schemas.committee import CommitteeSeat
+
+    st.subheader("叙事委员会 · Roundtable")
+    st.caption("在驱动逼近切换的关键时刻人工召开圆桌:可配置委员人格/专长/LLM/skill;主席综合机构 memo 级结论。不改图,只做咨询。")
+    view = build_committee_view(committee_repo)
+    skill_ids = [s.id for s in view.skill_library]
+    skill_desc = {s.id: s.description for s in view.skill_library}
+    skill_name = {s.id: s.name for s in view.skill_library}
+
+    # ---- session 内的工作席位(从配置 default_seats 初始化)----
+    if "committee_seats" not in st.session_state:
+        st.session_state["committee_seats"] = [s.model_dump() for s in view.default_seats]
+        st.session_state["committee_rounds"] = view.default_rounds
+        st.session_state["committee_mode"] = view.default_mode
+
+    cfg_tab, pend_tab, hist_tab = st.tabs(["⚙️ 配置席位", f"⚑ 待召开 ({len(view.pending)})", f"📜 历史 ({len(view.sessions)})"])
+
+    with cfg_tab:
+        tmpl_names = ["（不套用）"] + [t.name for t in view.templates]
+        pick = st.selectbox("套用预设阵容", tmpl_names, index=0)
+        if pick != "（不套用）" and st.button("应用此模板"):
+            t = next(t for t in view.templates if t.name == pick)
+            st.session_state["committee_seats"] = [s.model_dump() for s in t.seats]
+            st.session_state["committee_rounds"] = t.rounds
+            st.session_state["committee_mode"] = t.mode
+            st.rerun()
+
+        seats = st.session_state["committee_seats"]
+        st.markdown(f"**当前 {len(seats)} 个席位**(上限 5)")
+        for i, seat in enumerate(seats):
+            with st.expander(f"席位 {i+1}:{seat.get('name','')}", expanded=False):
+                seat["name"] = st.text_input("名称", seat.get("name", ""), key=f"cm_name_{i}")
+                seat["persona"] = st.selectbox("人格", view.personas,
+                    index=view.personas.index(seat["persona"]) if seat.get("persona") in view.personas else 0, key=f"cm_per_{i}")
+                seat["expertise"] = [x.strip() for x in st.text_input("专长(逗号分隔)", ",".join(seat.get("expertise", [])), key=f"cm_exp_{i}").split(",") if x.strip()]
+                tiers = ["auditor_1", "auditor_2", "auditor_3", "analysis", "narrative", "triage"]
+                seat["llm_tier"] = st.selectbox("LLM tier", tiers,
+                    index=tiers.index(seat["llm_tier"]) if seat.get("llm_tier") in tiers else 0, key=f"cm_tier_{i}")
+                seat["skills"] = st.multiselect("skills", skill_ids, default=[s for s in seat.get("skills", []) if s in skill_ids],
+                    format_func=lambda s: skill_name.get(s, s), key=f"cm_sk_{i}")
+                if st.button("删除此席位", key=f"cm_del_{i}"):
+                    seats.pop(i); st.rerun()
+        c1, c2 = st.columns(2)
+        if c1.button("➕ 加一个席位") and len(seats) < 5:
+            seats.append({"name": "新席位", "persona": view.personas[0], "expertise": [], "llm_tier": "auditor_1", "skills": []})
+            st.rerun()
+        st.session_state["committee_rounds"] = st.number_input("轮次 rounds", 1, 3, st.session_state["committee_rounds"])
+        st.session_state["committee_mode"] = st.selectbox("模式 mode", ["cross", "p2p"],
+            index=0 if st.session_state["committee_mode"] == "cross" else 1)
+        if c2.button("💾 保存为默认配置"):
+            committee_repo.save_committee_config([CommitteeSeat(**s) for s in seats],
+                st.session_state["committee_rounds"], st.session_state["committee_mode"])
+            st.success("已写回 config/committee.yaml")
+        with st.expander("skill 库一览"):
+            for s in view.skill_library:
+                st.caption(f"**{s.name}** (`{s.id}`) — {s.description}")
+
+    with pend_tab:
+        if not view.pending:
+            st.caption("当前没有待召开。驱动逼近切换(邻近 0.60/0.75/0.90 或加速)时,整合阶段会在这里标记。")
+        for p in view.pending:
+            with st.container(border=True):
+                tag = f"📊 邻近 {p.level:.0%}" if p.trigger == "proximity" else f"⚡ 加速 +{p.velocity_delta}"
+                rv = "🔁反转" if p.is_reversal else "🔀同向"
+                st.markdown(f"**{p.asset_name}** {tag} {rv}　逼近度 {p.ratio:.0%}　领先 `{p.leader}` ← 逼近 `{p.runner_up}`")
+                seats = st.session_state["committee_seats"]
+                if st.button("🤖 自动组阵", key=f"auto_{p.asset_id}_{p.trigger}_{p.level}"):
+                    drivers = [e.driver_label for e in graph_repo.incoming_edges(p.asset_id)]
+                    auto = auto_staff(drivers, [s.model_dump() for s in view.skill_library], view.personas, max_seats=5)
+                    st.session_state["committee_seats"] = [s.model_dump() for s in auto]
+                    st.rerun()
+                rounds = st.session_state["committee_rounds"]
+                st.caption(f"预估 LLM 调用 ≈ {estimate_calls(len(seats), rounds)} 次(席位 {len(seats)} × 轮次 {rounds} + 主席)")
+                if st.button("🏛 召开圆桌", key=f"conv_{p.asset_id}_{p.trigger}_{p.level}", type="primary"):
+                    with st.status("圆桌讨论中…", expanded=False) as status:
+                        try:
+                            seat_objs = [CommitteeSeat(**s) for s in seats]
+                            pairs = [(so, build_llm_client(load_llm_config(tier=so.llm_tier))) for so in seat_objs]
+                            chair = build_llm_client(load_llm_config(tier="narrative"))
+                            cm = NarrativeCommittee(seats=pairs, chair_client=chair, rounds=rounds,
+                                                    mode=st.session_state["committee_mode"], skill_desc=skill_desc)
+                            ctx = _committee_context(graph_repo, p)
+                            session = cm.convene(pending=p, context=ctx)
+                            committee_repo.save_session(session)
+                            committee_repo.clear_pending(p.asset_id)
+                            status.update(label=f"✅ {p.asset_name} 圆桌完成", state="complete")
+                        except Exception as exc:
+                            status.update(label=f"❌ {exc}", state="error")
+                    st.rerun()
+
+    with hist_tab:
+        if not view.sessions:
+            st.caption("还没有圆桌记录。")
+        for sess in view.sessions:
+            v = sess.verdict
+            with st.container(border=True):
+                st.markdown(f"### {sess.asset_name}　{v.switch_likelihood}·{v.direction}·信心{v.conviction}　`{_format_datetime(sess.created_at)}`")
+                st.info(f"**结论(BLUF)**:{v.bottom_line}")
+                st.write(f"**在变什么**:{v.whats_changing}")
+                st.write(f"**时间窗**:{v.time_horizon}　·　**信心** {round(v.confidence*100)}%")
+                if v.catalysts_to_watch:
+                    st.write("**盯这些催化剂**:" + "、".join(v.catalysts_to_watch))
+                st.write(f"**证伪/止损**:{v.invalidation}")
+                st.write(f"**仓位表达**:{v.positioning}")
+                if v.key_disagreements:
+                    st.write("**委员分歧**:" + "；".join(v.key_disagreements))
+                if v.evidence_basis:
+                    st.caption("证据基础:" + "、".join(v.evidence_basis))
+                with st.expander(f"各委员发言({len(sess.remarks)})"):
+                    for r in sess.remarks:
+                        st.caption(f"[第{r.round}轮] {r.seat_name}({r.persona}):{r.critique}")
+
+
+def _committee_context(graph_repo: Any, pending: Any) -> str:
+    node = graph_repo.get_node(pending.asset_id)
+    edges = sorted(graph_repo.incoming_edges(pending.asset_id), key=lambda e: e.weight, reverse=True)
+    lines = [f"资产:{pending.asset_name}({pending.asset_id})",
+             f"当前主导驱动:{node.dominant_driver if node else '—'} · 方向性强度 {round((node.strength if node else 0.5)*100)}%",
+             f"逼近:领先 {pending.leader} 被 {pending.runner_up} 逼近(逼近度 {pending.ratio:.0%},{'方向反转' if pending.is_reversal else '同向'})",
+             "入边(驱动/符号/权重/证据数):"]
+    for e in edges[:6]:
+        lines.append(f"  {e.driver_label} {'+' if e.sign>0 else '-'} w={round(e.weight,2)} 证据{len(e.supporting_evidence)}")
+    return "\n".join(lines)
 
 
 def _render_candidate_panel(st: Any, graph_repo: Any) -> None:
