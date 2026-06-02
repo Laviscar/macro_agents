@@ -146,6 +146,7 @@ def build_run_loop(
     except ValueError:
         trigger_levels = [0.60, 0.75, 0.90]
     committee_velocity = _interval("COMMITTEE_VELOCITY_DELTA", 0.10)
+    committee_reversal_only = os.environ.get("COMMITTEE_REVERSAL_ONLY", "true").lower() != "false"
 
     cfg_path = resolve_news_service_config_path(Path(config_path)).resolve()
     ingest_service = build_polling_service(load_news_service_config(cfg_path), repository)
@@ -171,7 +172,7 @@ def build_run_loop(
               lambda: consolidate_graph(repository, graph_repo, graph_manager, vocab, regimes,
                                         run_state_path, max_evidence=int(_interval("CONSOLIDATE_MAX_EVIDENCE", 50)),
                                         committee_repo=committee_repo, trigger_levels=trigger_levels,
-                                        velocity_delta=committee_velocity)),
+                                        velocity_delta=committee_velocity, committee_reversal_only=committee_reversal_only)),
     ]
     global _last_narrative_manager
     _last_narrative_manager = graph_manager

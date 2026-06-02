@@ -65,3 +65,23 @@ def test_state_debounces_second_call(tmp_path):
     state = {}
     evaluate_assets(repo, state, LEVELS, 0.10)
     assert evaluate_assets(repo, state, LEVELS, 0.10) == []   # nothing new on identical graph
+
+
+def test_reversal_only_filters_same_sign(tmp_path):
+    repo = GraphRepository(tmp_path, CONFIG); repo.seed_if_empty()
+    # SPX contested by two SAME-sign (+) drivers -> should NOT trigger under reversal_only
+    for drv, w, wp in (("风险偏好", 0.50, 0.50), ("增长预期", 0.46, 0.30)):
+        e = next((x for x in repo.incoming_edges("SPX") if x.driver_label == drv), None)
+        if e is None:
+            continue
+        e.weight, e.weight_prev = w, wp
+        e.supporting_evidence = [EdgeEvidenceRef(evidence_id=drv, created_at=NOW.isoformat(), contribution=0.5)]
+        repo.save_edge(e)
+    assert evaluate_assets(repo, {}, LEVELS, 0.10, reversal_only=True) == []          # same-sign filtered
+    # GOLD with opposite-sign drivers still triggers
+    for drv, w, wp in (("实际利率", 0.50, 0.50), ("央行购金", 0.46, 0.30)):
+        e = next(x for x in repo.incoming_edges("GOLD") if x.driver_label == drv)
+        e.weight, e.weight_prev = w, wp
+        e.supporting_evidence = [EdgeEvidenceRef(evidence_id=drv, created_at=NOW.isoformat(), contribution=0.5)]
+        repo.save_edge(e)
+    assert any(p.asset_id == "GOLD" for p in evaluate_assets(repo, {}, LEVELS, 0.10, reversal_only=True))

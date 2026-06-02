@@ -21,11 +21,14 @@ def velocity_fired(delta: float, threshold: float, already_fired: bool) -> bool:
     return (not already_fired) and delta >= threshold
 
 
-def evaluate_assets(graph_repo, state: dict, levels: list[float], velocity_delta: float) -> list[PendingConvocation]:
+def evaluate_assets(graph_repo, state: dict, levels: list[float], velocity_delta: float,
+                    reversal_only: bool = True) -> list[PendingConvocation]:
     """For each contested active asset, emit proximity / velocity pending convocations.
 
     `state` (mutated in place) holds per-asset {"highest": float, "vel_fired": bool} for
-    debouncing across runs."""
+    debouncing across runs. With `reversal_only` (default), only **direction-reversal**
+    contests (leader/runner edges have opposite signs) trigger a convocation — a same-sign
+    "换驱动" doesn't flip long/short, so it isn't worth a roundtable."""
     out: list[PendingConvocation] = []
     for node in graph_repo.list_nodes():
         if node.kind != "asset" or node.status != "active":
@@ -34,6 +37,8 @@ def evaluate_assets(graph_repo, state: dict, levels: list[float], velocity_delta
         if len(edges) < 2 or sum(len(e.supporting_evidence) for e in edges) == 0 or edges[0].weight <= 0:
             continue
         leader, runner = edges[0], edges[1]
+        if reversal_only and leader.sign == runner.sign:
+            continue
         ratio = runner.weight / leader.weight
         st = state.setdefault(node.id, {"highest": 0.0, "vel_fired": False})
         if ratio < min(levels):
