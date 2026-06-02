@@ -222,11 +222,19 @@ def _render_shifts_view(st: Any, v: Any) -> None:
 
 
 def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_path: Any) -> None:
+    from dataclasses import replace
+
     from agents.committee import NarrativeCommittee
     from committee.staffing import auto_staff
     from llm.config import load_llm_config
     from llm.factory import build_llm_client
     from schemas.committee import CommitteeSeat
+
+    def _committee_client(tier: str):
+        # 委员会用推理模型时,默认 30s 超时不够(主席综合一大段发言会超时);提到 ≥180s。
+        cfg = load_llm_config(tier=tier)
+        cfg = replace(cfg, timeout_seconds=max(cfg.timeout_seconds, 180.0))
+        return build_llm_client(cfg)
 
     st.subheader("叙事委员会 · Roundtable")
     st.caption("在驱动逼近切换的关键时刻人工召开圆桌:可配置委员人格/专长/LLM/skill;主席综合机构 memo 级结论。不改图,只做咨询。")
@@ -304,11 +312,11 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
                     with st.status("圆桌讨论中…", expanded=False) as status:
                         try:
                             seat_objs = [CommitteeSeat(**s) for s in seats]
-                            pairs = [(so, build_llm_client(load_llm_config(tier=so.llm_tier))) for so in seat_objs]
+                            pairs = [(so, _committee_client(so.llm_tier)) for so in seat_objs]
                             missing = [so.name for so, cl in pairs if cl is None]
                             if missing:
                                 st.warning(f"以下席位的 LLM tier 没配 key,已跳过:{', '.join(missing)}（去 .env 填 LLM_<TIER>_API_KEY,或把席位改到已配置的 tier 如 triage/narrative)")
-                            chair = build_llm_client(load_llm_config(tier="narrative"))
+                            chair = _committee_client("narrative")
                             cm = NarrativeCommittee(seats=pairs, chair_client=chair, rounds=rounds,
                                                     mode=st.session_state["committee_mode"], skill_desc=skill_desc)
                             ctx = _committee_context(graph_repo, p)
