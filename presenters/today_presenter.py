@@ -66,8 +66,8 @@ def _stance(node, incoming_edges, nature: dict | None = None) -> dict:
     return out
 
 
-def _rank_score(node, incoming_edges, shifting: set[str]) -> float:
-    """今日排序:①发生驱动切换 > ②逼近切换 > ③证据量 > ④方向性强度(偏离中性)。
+def _rank_score(node, incoming_edges, shifting: set[str], committee_alert: bool) -> float:
+    """今日排序:①发生驱动切换 > ②委员会判将至 > ③逼近切换 > ④证据量 > ⑤方向性强度。
 
     "逼近切换"只在节点有真实证据时才算 —— 否则种子图里等权的入边会被误判为 contested,
     让首页在没有任何新闻时就堆满假"分歧"。
@@ -76,6 +76,8 @@ def _rank_score(node, incoming_edges, shifting: set[str]) -> float:
     score = 0.0
     if node.id in shifting:
         score += 1000
+    if committee_alert:                      # 委员会判"切换将至" -> 排在逼近之上、切换之下
+        score += 800
     if ev > 0 and contested(incoming_edges):
         score += 500
     score += ev * 10
@@ -83,7 +85,15 @@ def _rank_score(node, incoming_edges, shifting: set[str]) -> float:
     return score
 
 
-def build_today_view(graph_repo, top_n: int = 7, pinned: list[str] | None = None) -> TodayView:
+def _committee_badge(badge: dict | None) -> tuple[str | None, bool]:
+    """(显示文本, 是否'切换将至')。"""
+    if not badge:
+        return None, False
+    text = f"{badge.get('switch_likelihood', '')}·{badge.get('direction', '')}·信心{badge.get('conviction', '')}"
+    return text, badge.get("switch_likelihood") == "将至"
+
+
+def build_today_view(graph_repo, top_n: int = 7, pinned: list[str] | None = None, committee_repo=None) -> TodayView:
     graph_repo.seed_if_empty()
     pinned = pinned or []
     assets = [n for n in graph_repo.list_nodes() if n.kind == "asset" and n.status == "active"]
@@ -94,7 +104,9 @@ def build_today_view(graph_repo, top_n: int = 7, pinned: list[str] | None = None
     scored = []
     for node in assets:
         incoming = graph_repo.incoming_edges(node.id)
-        scored.append((node, incoming, _rank_score(node, incoming, shifting)))
+        badge = committee_repo.get_badge(node.id) if committee_repo is not None else None
+        _, alert = _committee_badge(badge)
+        scored.append((node, incoming, _rank_score(node, incoming, shifting, alert)))
     # pinned first, then by score desc
     scored.sort(key=lambda t: (t[0].id not in pinned, -t[2]))
 
@@ -102,12 +114,13 @@ def build_today_view(graph_repo, top_n: int = 7, pinned: list[str] | None = None
     cards = []
     for (n, inc, _) in scored[:top_n]:
         s = _stance(n, inc, nature)
+        badge_text, _ = _committee_badge(committee_repo.get_badge(n.id) if committee_repo is not None else None)
         cards.append(TodayCard(
             asset_id=n.id, name=n.name, dominant_driver=n.dominant_driver, read_line=n.read_line,
             strength=n.strength, confidence=n.confidence, tags_regime=n.tags_regime,
             is_shifting=n.id in shifting, is_contested=contested(inc), evidence_count=_evidence_count(inc),
             lean=s["lean"], conviction=s["conviction"], challenger=s["challenger"],
-            switch_kind=s["switch_kind"], flip_note=s["flip_note"],
+            switch_kind=s["switch_kind"], flip_note=s["flip_note"], committee_badge=badge_text,
         ))
     return TodayView(available=True, cards=cards, total_assets=len(assets))
 

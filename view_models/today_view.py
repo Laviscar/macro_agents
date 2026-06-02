@@ -21,6 +21,7 @@ class TodayCard:
     challenger: str | None = None  # 逼近的次强驱动
     switch_kind: str | None = None # 方向反转风险 | 同向换驱动
     flip_note: str | None = None   # 切换的配置含义
+    committee_badge: str | None = None  # 委员会结论徽章(如"切换将至·偏空·信心高")
 
 
 @dataclass(slots=True)

@@ -119,3 +119,19 @@ def test_shifts_view_carries_lean_and_direction(tmp_path):
     assert c.current_lean == "偏多"
     assert {c.from_dir, c.to_dir} == {"利多", "利空"}   # opposite-sign drivers
     assert c.is_reversal is True
+
+
+def test_today_card_carries_committee_badge(tmp_path):
+    from repositories.committee_repository import CommitteeRepository
+    from schemas.committee import CommitteeSession, CommitteeSeat, CommitteeVerdict, SeatRemark
+    repo = _repo(tmp_path)
+    cr = CommitteeRepository(tmp_path, CONFIG)
+    v = CommitteeVerdict(bottom_line="b", whats_changing="w", switch_likelihood="将至", direction="偏空",
+        conviction="高", confidence=0.8, time_horizon="t", catalysts_to_watch=[], invalidation="i",
+        positioning="p", key_disagreements=[], evidence_basis=[])
+    cr.save_session(CommitteeSession(id="GOLD_t", asset_id="GOLD", asset_name="黄金", level=0.75,
+        seats=[CommitteeSeat(name="A", persona="鹰派")], rounds=1, mode="cross",
+        remarks=[SeatRemark(seat_name="A", persona="鹰派", round=1, critique="c")], verdict=v, created_at="t"))
+    view = build_today_view(repo, committee_repo=cr, pinned=["GOLD"])
+    card = next(c for c in view.cards if c.asset_id == "GOLD")
+    assert card.committee_badge == "将至·偏空·信心高"
