@@ -5,7 +5,7 @@ skills:
   - {id: fx_carry,      name: 外汇与套利,   persona: 鹰派,  description: "美日利差/carry/CNH 压力"}
   - {id: policy,        name: 政策解读,     persona: 鹰派,  description: "央行措辞、反应函数"}
   - {id: liquidity,     name: 流动性追踪,   persona: 鸽派,  description: "央行扩缩表/美元流动性"}
-  - {id: event_gap,     name: 事件与预期差, persona: 鸽派,  description: "CPI/非农 实际 vs 预期"}
+  - {id: event_gap,     name: 事件与预期差, persona: 数据派, description: "CPI/非农 实际 vs 预期(读数据)"}
   - {id: positioning,   name: 仓位与拥挤度, persona: 逆向,  description: "是否已 price-in、拥挤反转"}
   - {id: vol_structure, name: 波动率结构,   persona: 逆向,  description: "VIX/MOVE、期限结构、风险定价"}
   - {id: geopolitics,   name: 地缘风险,     persona: 逆向,  description: "避险/能源/供给冲击"}
