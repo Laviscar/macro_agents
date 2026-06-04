@@ -96,9 +96,11 @@ def build_run_loop(
     from llm.config import load_llm_config
     from llm.factory import build_llm_client
     from pipelines.live_ingest import build_polling_service, load_news_service_config, resolve_news_service_config_path
-    from pipelines.stages import analyze_pending, consolidate_graph, triage_pending
+    from pipelines.stages import analyze_pending, consolidate_graph, fetch_fred_readings, triage_pending
+    from repositories.fred_repository import FredRepository
     from repositories.graph_repository import GraphRepository
     from repositories.news_repository import SQLiteNewsRepository
+    from sources.fred import FredClient
 
     repository = SQLiteNewsRepository(db_path)
     storage_root = Path(storage_root)
@@ -148,6 +150,12 @@ def build_run_loop(
     committee_velocity = _interval("COMMITTEE_VELOCITY_DELTA", 0.10)
     committee_reversal_only = os.environ.get("COMMITTEE_REVERSAL_ONLY", "true").lower() != "false"
 
+    # v1.8: FRED 硬数据(数值真相层,0 LLM,不改图)。
+    fred_repo = FredRepository(storage_root=storage_root)
+    fred_client = FredClient(api_key_env="FRED_API_KEY")
+    _fred_doc = yaml.safe_load((Path("config") / "fred_series.yaml").read_text(encoding="utf-8"))
+    fred_series = _fred_doc.get("series", []) if _fred_doc else []
+
     cfg_path = resolve_news_service_config_path(Path(config_path)).resolve()
     ingest_service = build_polling_service(load_news_service_config(cfg_path), repository)
 
@@ -163,6 +171,8 @@ def build_run_loop(
         analysis_kwargs = {"limit": int(_interval("RUN_LOOP_ANALYSIS_BATCH", 10))}
 
     stages = [
+        Stage("fred", _interval("FRED_REFRESH_SECONDS", 21600),
+              lambda: fetch_fred_readings(fred_repo, fred_client, fred_series)),
         Stage("ingest", _interval("RUN_LOOP_INGEST_SECONDS", 300), ingest_service.run_once),
         Stage("triage", _interval("RUN_LOOP_TRIAGE_SECONDS", 900),
               lambda: triage_pending(repository, triage_agent, sorter, **triage_kwargs)),

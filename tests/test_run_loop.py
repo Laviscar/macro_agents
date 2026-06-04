@@ -66,3 +66,10 @@ def test_build_run_loop_no_audit_by_default(monkeypatch):
     monkeypatch.delenv("NARRATIVE_AUDIT_SEATS", raising=False)
     run_loop.build_run_loop()
     assert run_loop._last_narrative_manager.audit_panel is None
+
+
+def test_build_run_loop_has_fred_stage(monkeypatch):
+    import run_loop
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    loop = run_loop.build_run_loop()
+    assert any(s.name == "fred" for s in loop.stages)

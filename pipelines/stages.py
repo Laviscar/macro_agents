@@ -10,7 +10,9 @@ from agents.triage import TriageAgent
 from harness.coordinator import _load_or_build_resource_card, load_narrative_state, persist_narrative_state
 from pipelines.narrative_update import update_from_evidence
 from repositories.news_repository import SQLiteNewsRepository
+from schemas.fred import FredReading
 from schemas.graph_edge import EdgeEvidenceRef
+from sources.fred import FredError
 from utils.clock import now_iso
 from utils.io import read_json, write_json
 
@@ -97,6 +99,23 @@ def consolidate(
     state_doc["last_consolidation_at"] = now_iso()
     write_json(run_state_path, state_doc)
     return {"consolidated_evidence": len(evidence_list)}
+
+
+def fetch_fred_readings(fred_repo, fred_client, series_config: list[dict]) -> dict:
+    """拉取 FRED 硬数据写入读数库(0 LLM,不改图)。失败序列跳过+计数。"""
+    ok = errors = 0
+    for s in series_config:
+        try:
+            value, date, prev = fred_client.fetch_observation(s["series_id"])
+        except FredError:
+            errors += 1
+            continue
+        fred_repo.save_reading(FredReading(
+            series_id=s["series_id"], label=s.get("label", s["series_id"]), unit=s.get("unit", ""),
+            node_id=s.get("node_id"), value=value, date=date, prev=prev,
+            change=(round(value - prev, 4) if prev is not None else None), fetched_at=now_iso()))
+        ok += 1
+    return {"fred_ok": ok, "fred_errors": errors}
 
 
 def _parse_iso(ts: str) -> datetime:
