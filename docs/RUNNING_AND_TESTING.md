@@ -234,7 +234,15 @@ COMMITTEE_DEFAULT_ROUNDS=1
 
 ---
 
-## 4. 典型工作流（实时数据 → 持续叙事）
+## 4c. v1.8 FRED 硬宏观数据(数值真相层)
+
+**是什么**:从 FRED(圣路易斯联储)拉硬宏观时间序列(美债 10Y/2Y、实际利率 DFII10、通胀预期 T10YIE、政策利率 DFF、利差、美元、VIX + 失业/CPI/非农/GDP)。免费 key:https://fredaccount.stlouisfed.org/apikeys → 填 `.env` 的 `FRED_API_KEY`。
+
+**怎么用**:`run_loop` 有个低频 `fred` stage(默认 6h,`FRED_REFRESH_SECONDS`)拉取 → 存 `storage/fred_readings/`。**不走 LLM、不改图 strength/边权重**,是叠加的"硬读数"层:9 个序列映射到锚/因子节点(DFII10→实际利率、DGS10→US10Y…),4 个通用宏观读数(失业/CPI/非农/GDP)。
+
+**作用**:召开委员会圆桌时,把该资产驱动因子的 FRED 真值 + 通用宏观背景注入上下文(标"[FRED 实测]"),委员(尤其数据派)**引真值不编数**——解决了之前 LLM 编"实际利率 1.93%"的问题。没填 key 则 `fred` stage 跳过(告警不崩)。UI 展示按"先功能后 UI"留待后续。
+
+---
 
 ## 4. 典型工作流（实时数据 → 持续叙事）
 
