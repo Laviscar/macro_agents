@@ -11,6 +11,7 @@ from presenters.operations_presenter import build_operations_overview
 from presenters.committee_presenter import build_committee_view, estimate_calls
 from presenters.today_presenter import build_allocation_overview, build_shifts_view, build_today_view
 from repositories.committee_repository import CommitteeRepository
+from repositories.fred_repository import FredRepository
 from repositories.graph_repository import GraphRepository
 from repositories.news_repository import SQLiteNewsRepository
 from view_models.ingestion_qa import IngestionQAOverview
@@ -51,6 +52,7 @@ def main() -> None:
     repository = SQLiteNewsRepository(db_path)
     graph_repo = GraphRepository(storage_root=STORAGE_ROOT, config_dir=str(APP_ROOT / "config"))
     committee_repo = CommitteeRepository(storage_root=STORAGE_ROOT, config_dir=str(APP_ROOT / "config"))
+    fred_repo = FredRepository(storage_root=STORAGE_ROOT)
     today = build_today_view(graph_repo, committee_repo=committee_repo)
     shifts = build_shifts_view(graph_repo)
     operations = build_operations_overview(repository, STORAGE_ROOT)
@@ -81,7 +83,7 @@ def main() -> None:
         _render_shifts_view(st, shifts)
 
     with committee_tab:
-        _render_committee_view(st, committee_repo, graph_repo, db_path)
+        _render_committee_view(st, committee_repo, graph_repo, db_path, fred_repo)
 
     with workbench_tab:
         _render_data_view(st, repository, news_items, data_rows)
@@ -221,10 +223,11 @@ def _render_shifts_view(st: Any, v: Any) -> None:
             f"{c.implication}")
 
 
-def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_path: Any) -> None:
+def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_path: Any, fred_repo: Any = None) -> None:
     from dataclasses import replace
 
     from agents.committee import NarrativeCommittee
+    from committee.fred_context import fred_context_block
     from committee.market_data import fetch_market_snapshot
     from committee.staffing import random_staff
     from llm.config import load_llm_config
@@ -253,6 +256,11 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
                 context = _committee_context(graph_repo, pending)
                 snapshot = fetch_market_snapshot(pending.asset_id)   # 注入二级市场实时量价(数据派用)
                 context += f"\n二级市场量价:{snapshot}" if snapshot else "\n二级市场量价:(无实时数据)"
+                if fred_repo is not None:                            # 注入 FRED 硬数据(真值,勿编造)
+                    drivers = [e.driver_label for e in graph_repo.incoming_edges(pending.asset_id)]
+                    fred_block = fred_context_block(fred_repo, drivers)
+                    if fred_block:
+                        context += "\n" + fred_block
                 session = cm.convene(pending=pending, context=context)
                 committee_repo.save_session(session)
                 if clear_after:
