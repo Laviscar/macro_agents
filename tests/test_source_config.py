@@ -53,7 +53,7 @@ def test_default_sources_config_enabled_set() -> None:
     enabled = {source.name for source in config.enabled_sources()}
 
     assert enabled == {
-        "finnhub_general", "finnhub_crypto", "finnhub_econ_calendar",
+        "finnhub_general", "finnhub_crypto", "finnhub_forex", "finnhub_merger", "finnhub_econ_calendar",
         "fed_rss", "ecb_blog", "nyt_economy", "bis_press_rss",
     }
     # bls (403-blocks programmatic access) and symbol-specific company news stay off

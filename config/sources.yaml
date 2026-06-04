@@ -56,6 +56,24 @@ sources:
     category: crypto
     limit: 12
 
+  - type: finnhub
+    name: finnhub_forex
+    enabled: true               # 外汇新闻 → 喂 DXY/USDJPY/USDCNH(条目偏少,限量 10)
+    poll_interval_seconds: 900
+    endpoint: https://finnhub.io/api/v1/news
+    api_key_env: FINNHUB_API_KEY
+    category: forex
+    limit: 10
+
+  - type: finnhub
+    name: finnhub_merger
+    enabled: true               # 并购新闻 → 信用风险/风险偏好,限量 10
+    poll_interval_seconds: 1800
+    endpoint: https://finnhub.io/api/v1/news
+    api_key_env: FINNHUB_API_KEY
+    category: merger
+    limit: 10
+
   - type: finnhub_econ_calendar
     name: finnhub_econ_calendar
     enabled: true               # 经济日历(CPI/FOMC/非农…),只取 high-impact,量小信号高
