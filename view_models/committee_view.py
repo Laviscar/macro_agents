@@ -21,3 +21,4 @@ class CommitteeView:
     personas: list[str] = field(default_factory=list)
     default_rounds: int = 1
     default_mode: str = "cross"
+    stale_session_ids: list[str] = field(default_factory=list)  # 可能已过时的 session(被取代/局势已变)
