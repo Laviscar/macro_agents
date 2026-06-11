@@ -284,7 +284,7 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
 
     st.subheader("叙事委员会 · Roundtable")
     st.caption("在驱动逼近切换的关键时刻人工召开圆桌:可配置委员人格/专长/LLM/skill;主席综合机构 memo 级结论。不改图,只做咨询。")
-    view = build_committee_view(committee_repo)
+    view = build_committee_view(committee_repo, graph_repo=graph_repo)
     skill_ids = [s.id for s in view.skill_library]
     skill_desc = {s.id: s.description for s in view.skill_library}
     skill_name = {s.id: s.name for s in view.skill_library}
@@ -295,7 +295,9 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
         st.session_state["committee_rounds"] = view.default_rounds
         st.session_state["committee_mode"] = view.default_mode
 
-    cfg_tab, pend_tab, hist_tab = st.tabs(["⚙️ 配置席位", f"⚑ 待召开 ({len(view.pending)})", f"📜 历史 ({len(view.sessions)})"])
+    active_pending = [p for p in view.pending if p.status == "active"]
+    expired_pending = [p for p in view.pending if p.status != "active"]
+    cfg_tab, pend_tab, hist_tab = st.tabs(["⚙️ 配置席位", f"⚑ 待召开 ({len(active_pending)})", f"📜 历史 ({len(view.sessions)})"])
 
     with cfg_tab:
         tmpl_names = ["（不套用）"] + [t.name for t in view.templates]
@@ -339,9 +341,9 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
                 st.caption(f"**{s.name}** (`{s.id}`) — {s.description}")
 
     with pend_tab:
-        if not view.pending:
+        if not active_pending:
             st.caption("当前没有待召开。驱动逼近切换(邻近 0.60/0.75/0.90 或加速)时,整合阶段会在这里标记。")
-        for p in view.pending:
+        for p in active_pending:
             with st.container(border=True):
                 tag = f"📊 邻近 {p.level:.0%}" if p.trigger == "proximity" else f"⚡ 加速 +{p.velocity_delta}"
                 rv = "🔁反转" if p.is_reversal else "🔀同向"
@@ -358,14 +360,30 @@ def _render_committee_view(st: Any, committee_repo: Any, graph_repo: Any, db_pat
                 st.caption(f"预估 LLM 调用 ≈ {estimate_calls(len(seats), rounds)} 次(席位 {len(seats)} × 轮次 {rounds} + 主席)")
                 if st.button("🏛 召开圆桌", key=f"conv_{p.asset_id}_{p.trigger}_{p.level}", type="primary"):
                     _convene(p, clear_after=True)
+        if expired_pending:
+            st.divider()
+            st.caption(f"⏸ 已过期/被取代({len(expired_pending)})—— 同资产出现更新请求,保留作记录:")
+            for p in expired_pending:
+                st.caption(f"　~~{p.asset_name} · {p.leader}←{p.runner_up} · 触发 {_format_datetime(p.created_at)}~~ (已被更新请求取代)")
 
     with hist_tab:
         if not view.sessions:
             st.caption("还没有圆桌记录。")
         for sess in view.sessions:
             v = sess.verdict
+            stale = sess.id in view.stale_session_ids
             with st.container(border=True):
-                st.markdown(f"### {sess.asset_name}　{v.switch_likelihood}·{v.direction}·信心{v.conviction}　`{_format_datetime(sess.created_at)}`")
+                title = f"### {sess.asset_name}　{v.switch_likelihood}·{v.direction}·信心{v.conviction}　`{_format_datetime(sess.created_at)}`"
+                if stale:
+                    st.markdown("⚠️ **可能已过时**(已被更新的圆桌或驱动切换取代,保留作记录)")
+                    st.caption(title.replace("### ", ""))
+                    st.caption(f"结论:{v.bottom_line}")
+                    with st.expander("展开过时记录"):
+                        st.write(f"方向 {v.direction}·信心{v.conviction} · {v.positioning}")
+                        for r in sess.remarks:
+                            st.caption(f"[第{r.round}轮] {r.seat_name}({r.persona}):{r.critique}")
+                    continue
+                st.markdown(title)
                 st.info(f"**结论(BLUF)**:{v.bottom_line}")
                 st.write(f"**在变什么**:{v.whats_changing}")
                 st.write(f"**时间窗**:{v.time_horizon}　·　**信心** {round(v.confidence*100)}%")
