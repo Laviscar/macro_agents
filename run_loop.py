@@ -167,8 +167,10 @@ def build_run_loop(
         triage_kwargs = {"limit": triage_batch, "since": since, "newest_first": True}
         analysis_kwargs = {"limit": analysis_batch, "since": since, "newest_first": True}
     else:
-        triage_kwargs = {"limit": int(_interval("RUN_LOOP_TRIAGE_BATCH", 20))}
-        analysis_kwargs = {"limit": int(_interval("RUN_LOOP_ANALYSIS_BATCH", 10))}
+        # v1.9: 默认最新优先,让最新新闻先进图、旧积压自然老化(freshness 优先);RUN_LOOP_NEWEST_FIRST=false 退回最旧优先
+        newest_first = os.environ.get("RUN_LOOP_NEWEST_FIRST", "true").lower() != "false"
+        triage_kwargs = {"limit": int(_interval("RUN_LOOP_TRIAGE_BATCH", 20)), "newest_first": newest_first}
+        analysis_kwargs = {"limit": int(_interval("RUN_LOOP_ANALYSIS_BATCH", 10)), "newest_first": newest_first}
 
     stages = [
         Stage("fred", _interval("FRED_REFRESH_SECONDS", 21600),

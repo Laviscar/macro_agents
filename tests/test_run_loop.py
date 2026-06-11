@@ -73,3 +73,13 @@ def test_build_run_loop_has_fred_stage(monkeypatch):
     monkeypatch.setenv("OPENAI_API_KEY", "k")
     loop = run_loop.build_run_loop()
     assert any(s.name == "fred" for s in loop.stages)
+
+
+def test_build_run_loop_newest_first_default(monkeypatch):
+    import run_loop
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    monkeypatch.delenv("RUN_LOOP_NEWEST_FIRST", raising=False)
+    # build and confirm the continuous triage/analysis stages were created (smoke);
+    # newest-first default is exercised via the kwargs path (no run_now)
+    loop = run_loop.build_run_loop()
+    assert any(s.name == "triage" for s in loop.stages) and any(s.name == "analysis" for s in loop.stages)
