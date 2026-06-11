@@ -134,6 +134,10 @@ def _evaluate_committee(committee_repo, graph_repo, trigger_levels, velocity_del
     pendings = evaluate_assets(graph_repo, tstate, trigger_levels or [0.60, 0.75, 0.90],
                                velocity_delta, reversal_only=reversal_only)
     committee_repo.save_trigger_state(tstate)
+    # 同一资产出现新待召开 → 旧的标记 expired(保留),再存新的
+    for aid in {p.asset_id for p in pendings}:
+        new_ct = next(p.created_at for p in pendings if p.asset_id == aid)
+        committee_repo.supersede_pending(aid, new_ct)
     for p in pendings:
         committee_repo.save_pending(p)
     return len(pendings)

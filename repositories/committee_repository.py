@@ -47,6 +47,21 @@ class CommitteeRepository:
             if p.asset_id == asset_id:
                 f.unlink()
 
+    def list_active_pending(self) -> list[PendingConvocation]:
+        return [p for p in self.list_pending() if p.status == "active"]
+
+    def supersede_pending(self, asset_id: str, keep_created_at: str) -> int:
+        """同一资产:把 active 且 created_at < keep_created_at 的旧待召开标记 expired(保留文件)。
+        返回被标记的条数。"""
+        n = 0
+        for f in self.pending_dir.glob("*.json"):
+            p = PendingConvocation.model_validate_json(f.read_text(encoding="utf-8"))
+            if p.asset_id == asset_id and p.status == "active" and p.created_at < keep_created_at:
+                p.status = "expired"
+                f.write_text(p.model_dump_json(), encoding="utf-8")
+                n += 1
+        return n
+
     # ---- trigger state ----
     def save_trigger_state(self, state: dict) -> None:
         self.state_path.write_text(json.dumps(state, ensure_ascii=False), encoding="utf-8")

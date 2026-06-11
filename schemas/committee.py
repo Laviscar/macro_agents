@@ -42,6 +42,7 @@ class PendingConvocation(BaseModel):
     runner_up: str
     is_reversal: bool
     created_at: str
+    status: Literal["active", "expired"] = "active"  # 同资产出现更新请求时,旧的→expired(保留)
 
 
 class SeatRemark(BaseModel):
