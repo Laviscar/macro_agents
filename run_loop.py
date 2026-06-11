@@ -172,7 +172,10 @@ def build_run_loop(
         triage_kwargs = {"limit": int(_interval("RUN_LOOP_TRIAGE_BATCH", 20)), "newest_first": newest_first}
         analysis_kwargs = {"limit": int(_interval("RUN_LOOP_ANALYSIS_BATCH", 10)), "newest_first": newest_first}
 
+    from pipelines.freshness import freshness_summary
     stages = [
+        Stage("freshness", _interval("FRESHNESS_LOG_SECONDS", 900),
+              lambda: freshness_summary(repository, graph_repo, committee_repo, fred_repo)),
         Stage("fred", _interval("FRED_REFRESH_SECONDS", 21600),
               lambda: fetch_fred_readings(fred_repo, fred_client, fred_series)),
         Stage("ingest", _interval("RUN_LOOP_INGEST_SECONDS", 300), ingest_service.run_once),
